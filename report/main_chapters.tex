@@ -1,0 +1,238 @@
+\documentclass[12pt,a4paper]{report}
+\usepackage{fontspec}
+\setmainfont{Latin Modern Roman}
+\usepackage[vietnamese]{babel}
+\usepackage[a4paper,top=2.3cm,bottom=2.3cm,left=3cm,right=2cm]{geometry}
+\usepackage{amsmath,amssymb,graphicx,booktabs,float,caption,hyperref,listings,xcolor,tabularx}
+\usepackage{microtype}
+\usepackage{anyfontsize}
+\makeatletter
+\renewcommand\normalsize{\@setfontsize\normalsize{13}{16.5}}
+\renewcommand\small{\@setfontsize\small{13}{16.5}}
+\renewcommand\footnotesize{\@setfontsize\footnotesize{13}{16}}
+\renewcommand\scriptsize{\@setfontsize\scriptsize{13}{16}}
+\renewcommand\tiny{\@setfontsize\tiny{13}{16}}
+\renewcommand\large{\@setfontsize\large{14}{18}}
+\makeatother
+\normalsize
+\setlength{\parskip}{0.2em}
+\captionsetup{font=small,labelfont=bf,labelsep=space}
+\graphicspath{{../results/figures/}}
+\counterwithin{figure}{chapter}
+\counterwithin{table}{chapter}
+\lstset{basicstyle=\ttfamily\small,breaklines=true,frame=single,columns=fullflexible,
+  backgroundcolor=\color{gray!8},language=Python,showstringspaces=false}
+\hypersetup{hidelinks,pdftitle={Backpropagation và Khởi tạo tham số trong Deep Learning}}
+\addto\captionsvietnamese{\renewcommand{\contentsname}{MỤC LỤC}}
+\addto\captionsvietnamese{\renewcommand{\listfigurename}{DANH MỤC HÌNH VẼ}}
+\addto\captionsvietnamese{\renewcommand{\listtablename}{DANH MỤC BẢNG BIỂU}}
+\addto\captionsvietnamese{\renewcommand{\bibname}{TÀI LIỆU THAM KHẢO}}
+\addto\captionsvietnamese{\renewcommand{\appendixname}{PHỤ LỤC}}
+\addto\captionsvietnamese{\renewcommand{\chaptername}{Chương}}
+
+\begin{document}
+\pagenumbering{roman}
+
+\chapter*{LỜI CẢM ƠN}
+\addcontentsline{toc}{chapter}{LỜI CẢM ƠN}
+\setlength{\parskip}{0.9em}\linespread{1.2}\selectfont
+Nhóm chúng em xin gửi lời cảm ơn chân thành tới Đại học Công nghiệp Hà Nội, Trường Công nghệ Thông tin và Truyền thông, cùng các thầy cô đã giảng dạy học phần Deep Learning. Những kiến thức về đại số tuyến tính, giải tích, chain rule và các phương pháp huấn luyện mạng nơ-ron là nền tảng để chúng em thực hiện đề tài này.
+
+Chúng em đặc biệt cảm ơn thầy cô hướng dẫn đã góp ý về cách đặt câu hỏi nghiên cứu, cách thiết kế thí nghiệm kiểm soát biến và cách trình bày kết quả một cách trung thực. Những nhận xét của thầy cô giúp chúng em phân biệt rõ đâu là kết quả đo được và đâu là suy luận lý thuyết, đồng thời hạn chế việc khái quát hoá vượt quá phạm vi thí nghiệm.
+
+Trong quá trình thực hiện, nhóm đã cùng nhau tìm hiểu tài liệu, cài đặt backpropagation thủ công bằng NumPy, kiểm tra kết quả bằng PyTorch autograd và sai phân hữu hạn, chạy các lưới thí nghiệm và tổng hợp số liệu. Mỗi thành viên đều tham gia vào các khâu lý thuyết, cài đặt và viết báo cáo.
+
+Do thời gian và kinh nghiệm nghiên cứu còn hạn chế, báo cáo chắc chắn không tránh khỏi thiếu sót. Nhóm chúng em rất mong nhận được những góp ý của thầy cô và bạn bè để đề tài được hoàn thiện hơn trong thời gian tới.
+
+Chúng em xin chân thành cảm ơn!
+
+\vspace{1cm}
+\hfill{\textit{Hà Nội, tháng 9 năm 2026}}\\
+\hfill{\textbf{Nhóm 2 thực hiện}}
+
+\linespread{1.0}\selectfont\setlength{\parskip}{0.2em}
+\chapter*{DANH MỤC TỪ VIẾT TẮT}
+\addcontentsline{toc}{chapter}{DANH MỤC TỪ VIẾT TẮT}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+Viết tắt & Giải thích \\
+\midrule
+MLP & Multi-Layer Perceptron (mạng nơ-ron nhiều lớp kết nối đầy đủ) \\
+ReLU & Rectified Linear Unit \\
+SGD & Stochastic Gradient Descent \\
+RMS & Root Mean Square \\
+VJP & Vector--Jacobian Product \\
+NaN & Not a Number \\
+\bottomrule
+\end{tabularx}
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+\chapter*{LỜI MỞ ĐẦU}
+\addcontentsline{toc}{chapter}{LỜI MỞ ĐẦU}
+\pagenumbering{arabic}
+
+Huấn luyện mạng nơ-ron là bài toán tối ưu hoá tham số $\theta$ theo hàm mất mát $L(\theta)$. Gradient $\nabla_\theta L$ được tính bằng backpropagation, và điểm khởi đầu của $\theta$ quyết định gradient có co lại, phình ra hay được giữ ổn định qua các lớp. Hiện tượng vanishing và exploding gradient là rào cản lớn khi huấn luyện mạng sâu.
+
+\textbf{Vấn đề nghiên cứu:} khởi tạo tham số ảnh hưởng thế nào đến lan truyền gradient và khả năng học của mạng sâu?
+
+\textbf{Câu hỏi nghiên cứu:}
+\begin{itemize}
+  \item RQ1: Backpropagation tính gradient như thế nào và vì sao gradient ở lớp đầu có thể vanish hoặc explode?
+  \item RQ2: Các cách khởi tạo (Zero, Random nhỏ, Random lớn, Xavier, He) gây ra những thất bại nào trong cùng một kiến trúc?
+  \item RQ3: Xavier và He có khác biệt có ý nghĩa trong thiết lập này không, và gradient ổn định có đảm bảo generalization không?
+\end{itemize}
+
+\textbf{Mục tiêu:} trình bày backpropagation và khởi tạo tham số có chứng cứ bằng giải thích toán học và thực nghiệm nhỏ trên Fashion-MNIST.
+
+\textbf{Đối tượng và phạm vi:} MLP $784\to128\times10\to10$ với ReLU, Fashion-MNIST subset 5.000/1.000/2.000, SGD cố định $\eta=0{,}05$, 15 epoch, seed 42 (5 seed cho Xavier và He). Không khảo sát CNN, Transformer, Adam hay BatchNorm.
+
+\textbf{Phương pháp:} nghiên cứu tài liệu, thực nghiệm có kiểm soát (chỉ đổi cách khởi tạo weight), và đo gradient RMS, activation variance, loss và accuracy.
+
+\textbf{Bố cục:} Chương 1 trình bày cơ sở lý thuyết; Chương 2 thiết kế thực nghiệm; Chương 3 kết quả và thảo luận; phần Kết luận trả lời các câu hỏi nghiên cứu.
+
+\chapter{CƠ SỞ LÝ THUYẾT}
+\section{Bài toán huấn luyện và gradient descent}
+Huấn luyện là tìm $\theta^\ast=\arg\min_\theta \mathbb E[L(f_\theta(x),y)]$. Gradient descent cập nhật $\theta_{\text{new}}=\theta_{\text{old}}-\eta\nabla_\theta L$. Gradient là vector các đạo hàm riêng và chỉ hướng tăng nhanh nhất của $L$, nên dấu trừ đưa tham số đi ngược hướng tăng.
+
+\section{Chain rule, Jacobian và backpropagation}
+Với $z=g(u)$, $L=f(z)$: $\partial L/\partial u=(\partial L/\partial z)(\partial z/\partial u)$. Forward pass tính đầu ra và lưu các giá trị trung gian. Backward pass tính $\delta^{(l-1)}=J_l^\top\delta^{(l)}$ và $\partial L/\partial W^{(l)}=\delta^{(l)}(h^{(l-1)})^\top$. Backprop chỉ thực hiện tích vector--Jacobian (VJP), không lập ma trận Jacobian đầy đủ. Backprop tính gradient; optimizer mới cập nhật tham số.
+
+\section{Vanishing và exploding gradient}
+Gradient ở lớp đầu là tích nhiều Jacobian. Nếu mỗi lớp co norm theo hệ số $0{,}5$, sau 20 lớp hệ số là $0{,}5^{20}\approx9{,}5\times10^{-7}$. Nếu khuếch đại theo hệ số $1{,}5$, sau 20 lớp hệ số khoảng $3\times10^{3}$. Với sigmoid và tanh, bão hoà làm đạo hàm về 0; với ReLU, second moment $\mathbb E[a^2]$ giảm xấp xỉ một nửa mỗi lớp.
+
+\section{Khởi tạo tham số}
+\begin{itemize}
+  \item \textbf{Zero:} các neuron cùng lớp giống hệt nhau, gây thất bại đối xứng (failure to break symmetry). Bias khởi tạo 0 vẫn chấp nhận được.
+  \item \textbf{Random} $\mathcal N(0,\sigma^2)$: $\sigma$ nhỏ gây vanishing, $\sigma$ lớn gây exploding.
+  \item \textbf{Xavier/Glorot} (Normal): $\operatorname{Var}(W)=2/(n_{\text{in}}+n_{\text{out}})$, giả định activation tuyến tính quanh 0 hoặc đối xứng quanh 0 (như tanh).
+  \item \textbf{He/Kaiming}: $\operatorname{Var}(W)=2/n_{\text{in}}$, bù việc ReLU làm giảm $\mathbb E[a^2]$.
+\end{itemize}
+
+\section{Nghiên cứu liên quan}
+Backpropagation được giới thiệu bởi Rumelhart và cộng sự~\cite{rumelhart}; Glorot và Bengio đề xuất Xavier~\cite{glorot}; He và cộng sự đề xuất He initialization cho ReLU~\cite{he}; LeCun và cộng sự tổng hợp các mẹo huấn luyện~\cite{lecun}. Báo cáo này đóng góp một thí nghiệm kiểm soát biến khởi tạo, đo gradient và activation variance tại khởi tạo trên mạng 10 lớp.
+
+\chapter{THIẾT KẾ THỰC NGHIỆM}
+\section{Dữ liệu}
+Fashion-MNIST~\cite{fmnist}: 5.000 mẫu train, 1.000 validation, 2.000 test. Ảnh 28$\times$28 được làm phẳng thành 784 chiều và chuẩn hoá theo mean/std của tập train.
+
+\section{Kiến trúc và huấn luyện}
+\begin{table}[htbp]
+\centering
+\begin{tabular}{ll}
+\toprule
+Thành phần & Giá trị \\
+\midrule
+Kiến trúc & MLP $784\to128\times10\to10$, ReLU \\
+Optimizer & SGD thuần, $\eta=0{,}05$, batch 128, 15 epoch \\
+Loss & CrossEntropy \\
+Bias & Khởi tạo 0 trong mọi cấu hình \\
+Seed & 42; 5 seed $\{42,\dots,46\}$ cho Xavier và He \\
+Biến duy nhất & Cách khởi tạo weight \\
+\bottomrule
+\end{tabular}
+\caption{Thiết lập thực nghiệm cố định.}
+\label{tab:setup}
+\end{table}
+
+\section{Biến đo và giao thức}
+Gradient RMS $=\sqrt{\mathrm{mean}(g^2)}$ đo trên batch đầu tiên, trước mọi cập nhật. Activation variance đo tương tự. Test chỉ dùng đánh giá cuối. Thí nghiệm độ sâu dùng số epoch ít hơn nên số tuyệt đối chỉ dùng so sánh tương đối.
+
+\chapter{KẾT QUẢ VÀ THẢO LUẬN}
+\section{Kết quả tại khởi tạo}
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Khởi tạo & Gradient RMS lớp 1 & Test accuracy & Hành vi \\
+\midrule
+Zero & $0$ & 10,0\% & Thất bại đối xứng \\
+Random nhỏ ($\sigma=0{,}01$) & $1{,}1\times10^{-13}$ & 10,0\% & Vanishing \\
+Random lớn ($\sigma=1{,}0$) & $1{,}9\times10^{7}$ & 10,0\% (loss NaN) & Exploding $\to$ NaN \\
+Xavier (Normal) & $4{,}4\times10^{-4}$ & 68,2\% & Không vanish/explode rõ rệt \\
+He (Kaiming) & $1{,}1\times10^{-2}$ & 67,4\% & Không vanish/explode rõ rệt \\
+\bottomrule
+\end{tabular}
+\caption{Kết quả tại khởi tạo và test accuracy sau 15 epoch (seed 42).}
+\label{tab:init}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.36\linewidth]{gradient_heatmap_slide.png}
+\caption{Gradient RMS ($\log_{10}$) theo lớp và cách khởi tạo, đo tại khởi tạo trên một batch.}
+\label{fig:heat}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.24\linewidth]{activation_variance_slide.png}
+\caption{Activation variance tại khởi tạo theo lớp (forward pass), một batch, trước mọi cập nhật.}
+\label{fig:var}
+\end{figure}
+
+\section{Quỹ đạo huấn luyện}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.24\linewidth]{deep_demo_accuracy_slide.png}
+\caption{Validation accuracy theo epoch cho năm cách khởi tạo cùng kiến trúc.}
+\label{fig:acc}
+\end{figure}
+Zero và Random nhỏ dừng ở 10\%; Random lớn không hội tụ; Xavier và He đạt khoảng 67--68\% test accuracy. Dao động validation accuracy đáng kể do vanilla SGD với $\eta=0{,}05$, không momentum và không scheduler, trên mạng 10 tầng.
+
+\section{Xavier so với He}
+Trên 5 seed, test accuracy trung bình $\pm$ độ lệch chuẩn là $69{,}1\%\pm4{,}7$pp (Xavier) và $70{,}5\%\pm5{,}7$pp (He); khoảng mean $\pm$ 1 std chồng lấn. Gradient RMS lớp 1 của He lớn hơn Xavier khoảng 35 lần, nhất quán trên mọi seed, nhưng gradient lớn hơn không đồng nghĩa với kết quả tốt hơn. Chưa đủ cơ sở xếp hạng Xavier và He.
+
+\section{Độ sâu}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.36\linewidth]{depth_comparison_v2_slide.png}
+\caption{Gradient RMS lớp 1 tại khởi tạo theo độ sâu, cho Random, Xavier và He.}
+\label{fig:depth}
+\end{figure}
+Khi độ sâu tăng, gradient của Random và Xavier suy giảm; He giữ scale tốt hơn trong thiết lập này. Ổn định gradient không đồng nghĩa với generalization tốt: ở độ sâu 12, He có train loss thấp nhưng test loss cao.
+
+\section{Thảo luận}
+Ba thất bại ban đầu được phân biệt rõ: Zero-init thất bại vì đối xứng, Random nhỏ vì vanishing, Random lớn vì exploding. Với mạng rất sâu cần thêm Residual connections và Normalization; báo cáo không thực nghiệm các kỹ thuật này.
+
+\chapter*{KẾT LUẬN}
+\addcontentsline{toc}{chapter}{KẾT LUẬN}
+\begin{enumerate}
+  \item Backpropagation là chain rule áp dụng ngược qua đồ thị tính toán; gradient descent là quy tắc cập nhật dùng gradient đó.
+  \item Trong thiết lập đã thử, zero-init gây thất bại đối xứng, random nhỏ gây vanishing, random lớn gây exploding; Xavier và He tránh được các thất bại này.
+  \item Chưa đủ cơ sở xếp hạng Xavier và He; gradient ổn định không đảm bảo generalization tốt.
+\end{enumerate}
+\textbf{Hạn chế:} subset dữ liệu nhỏ; chỉ MLP với ReLU; SGD cố định; đo tại khởi tạo trên một batch; Zero, Random nhỏ và Random lớn chỉ có 1 seed.
+\textbf{Hướng phát triển:} nhiều seed hơn để đánh giá Xavier và He; thử Adam và BatchNorm; kết hợp initialization với Residual connections.
+
+\begin{thebibliography}{9}
+\bibitem{rumelhart} D. E. Rumelhart, G. E. Hinton, R. J. Williams. Learning representations by back-propagating errors. \emph{Nature}, 323(6088):533--536, 1986.
+\bibitem{lecun} Y. LeCun, L. Bottou, G. B. Orr, K.-R. Müller. Efficient BackProp. In \emph{Neural Networks: Tricks of the Trade}, 1998/2012.
+\bibitem{glorot} X. Glorot, Y. Bengio. Understanding the difficulty of training deep feedforward neural networks. \emph{AISTATS}, 2010.
+\bibitem{he} K. He, X. Zhang, S. Ren, J. Sun. Delving Deep into Rectifiers. \emph{ICCV}, 2015. arXiv:1502.01852.
+\bibitem{fmnist} H. Xiao, K. Rasul, R. Vollgraf. Fashion-MNIST. arXiv:1708.07747, 2017.
+\end{thebibliography}
+
+\appendix
+\chapter*{PHỤ LỤC A. MÃ NGUỒN TRÍCH DẪN}
+\addcontentsline{toc}{chapter}{PHỤ LỤC A. Mã nguồn trích dẫn}
+\begin{lstlisting}[caption={Tính gradient RMS tại khởi tạo (trích, experiments/run\_deep\_demo.py)}]
+loss = criterion(model(x), y)
+loss.backward()
+grad_rms = [p.grad.pow(2).mean().sqrt().item()
+            for n, p in model.named_parameters() if "weight" in n]
+\end{lstlisting}
+
+\chapter*{PHỤ LỤC B. LỆNH TÁI LẬP KẾT QUẢ}
+\addcontentsline{toc}{chapter}{PHỤ LỤC B. Lệnh tái lập kết quả}
+\begin{lstlisting}[language=bash]
+python experiments/run_manual_backprop.py
+python experiments/run_gradient_check.py
+python experiments/run_deep_demo.py
+python experiments/run_multiseed.py
+python experiments/run_depth_experiment_v2.py
+\end{lstlisting}
+
+\end{document}

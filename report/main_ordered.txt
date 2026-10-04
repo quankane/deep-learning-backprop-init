@@ -1,0 +1,5 @@
+c xu hng chung thay vì giá tr tng epoch riêng l. · Lp output cng khi to theo cùng scheme vi các lp n (xem src/
+models.py) dù lp output không có activation phi tuyn phía sau -- la chn n gin hoá, có th không ti u tuyt i nhng không nh hng ti các kt lun nh tính ca báo cáo. · Thc nghim  sâu (Mc 1.5.1) dùng 8 epoch (ít hn 15 epoch ca li chính) và cng ch 1 seed -- hin tng suy sp khái quát hoá ti L=12 ca He (Hình 1.4) là mt quan sát tht nhng n l; cha   khng nh ây là quy lut chung (vd. "He luôn overfit ti L  12") hay c thù ca úng seed/kin trúc này. Cn chy nhiu seed  các  sâu lân cn (L=11, 13)  xác nhn trc khi coi ây là kt lun tng quát. Tng hp li: gii hn ln nht xuyên sut là thiu lp li nhiu seed -- mi so sánh nh tính ca báo cáo (Zero/Random tht bi tuyt i, Sigmoid tht bi vi mi scheme, LeCun/Xavier/He thành công rõ rt vi Tanh/ReLU) u  chc chn vì chênh lch rt ln so vi nhiu ngu nhiên hp lý ca mt seed; nhng mi so sánh nh lng chính xác gia các cu hình gn nhau (He vs. Xavier, im gãy  sâu chính xác ca He) cn thêm thc nghim nhiu seed mi nên trích dn nh s liu dt khoát.
+40
+
+

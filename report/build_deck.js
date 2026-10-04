@@ -70,23 +70,74 @@ pres.layout = "WIDE";
 const W = 13.333, H = 7.5;
 const MX = 0.7;
 
-const TOTAL_SLIDES = 31;
+const TOTAL_SLIDES = 26;
 const ACTS = [
-  { label: "Motivation & Math", from: 2, to: 9 },
-  { label: "Vanishing/Exploding & Init", from: 10, to: 17 },
-  { label: "Experiment", from: 18, to: 27 },
-  { label: "Conclusion", from: 28, to: 31 },
+  { label: "Motivation & Math", from: 2, to: 7 },
+  { label: "Vanishing/Exploding & Init", from: 8, to: 15 },
+  { label: "Experiment", from: 16, to: 23 },
+  { label: "Conclusion", from: 24, to: 26 },
 ];
 
+let SLIDE_NO = 0;
+
+// Chữ subscript dạng "W_ij" -> W với "ij" nằm dưới (baseline shift thật của PowerPoint),
+// không để nguyên dấu "_". Bỏ qua code (Consolas) và đường dẫn file.
+const SUB_RE = /_(θ|[A-Za-z0-9]+)/g;
+const SUB_SKIP = /(results\/|\.json|\.py|\.png|\.md|\.csv|\.pptx|\.js)/;
+const hasSub = (t) => typeof t === "string" && !SUB_SKIP.test(t) && new RegExp(SUB_RE.source).test(t);
+function splitSub(str) {
+  const parts = []; let last = 0; let m;
+  const re = new RegExp(SUB_RE.source, "g");
+  while ((m = re.exec(str))) {
+    if (m.index > last) parts.push({ t: str.slice(last, m.index), sub: false });
+    parts.push({ t: m[1], sub: true });
+    last = re.lastIndex;
+  }
+  if (last < str.length) parts.push({ t: str.slice(last), sub: false });
+  return parts;
+}
+function richSlide(slide) {
+  const orig = slide.addText.bind(slide);
+  slide.addText = (text, opts = {}) => {
+    if (opts.fontFace && /Consolas/.test(opts.fontFace)) return orig(text, opts);
+    if (typeof text === "string" && hasSub(text)) {
+      const runs = splitSub(text).map((p) => ({ text: p.t, options: p.sub ? { subscript: true } : {} }));
+      return orig(runs, opts);
+    }
+    if (Array.isArray(text) && text.some((it) => it && hasSub(it.text))) {
+      const out = [];
+      text.forEach((it) => {
+        const o = it.options || {};
+        if (!hasSub(it.text)) { out.push(it); return; }
+        const parts = splitSub(it.text);
+        parts.forEach((p, i) => {
+          const isLast = i === parts.length - 1;
+          out.push({ text: p.t, options: {
+            ...o,
+            bullet: i === 0 ? o.bullet : undefined,
+            breakLine: isLast ? o.breakLine : undefined,
+            paraSpaceAfter: isLast ? o.paraSpaceAfter : undefined,
+            subscript: p.sub ? true : undefined,
+          } });
+        });
+      });
+      return orig(out, opts);
+    }
+    return orig(text, opts);
+  };
+  return slide;
+}
+function addSlide() { SLIDE_NO += 1; return richSlide(pres.addSlide()); }
+
 // ---------------------------------------------------------------- helpers
-function pageTag(slide, n) {
-  slide.addText(`${n}/${TOTAL_SLIDES}`, {
+function pageTag(slide) {
+  slide.addText(`${SLIDE_NO}/${TOTAL_SLIDES}`, {
     x: W - 1.1, y: H - 0.45, w: 0.8, h: 0.3, fontSize: 9, color: MUTED,
     align: "right", fontFace: FONT_BODY, isTextBox: true, margin: 0,
   });
 }
-function stampFooter(slide, slideNum, dark = false) {
-  const actIdx = ACTS.findIndex((a) => slideNum >= a.from && slideNum <= a.to);
+function stampFooter(slide, _unused, dark = false) {
+  const actIdx = ACTS.findIndex((a) => SLIDE_NO >= a.from && SLIDE_NO <= a.to);
   if (actIdx === -1) return;
   const dotR = 0.065, gap = 0.24, y = H - 0.42;
   const offColor = dark ? "3A4A70" : "D9DEE8";
@@ -193,7 +244,7 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 // SLIDE 1 — Title
 // ================================================================
 {
-  const s = pres.addSlide(); darkBg(s);
+  const s = addSlide(); darkBg(s);
   (function drawNetworkDecoration() {
     const layers = [4, 6, 6, 3];
     const originX = 8.6, originY = 0.9, layerGap = 1.35, nodeGap = 0.62, r = 0.075;
@@ -247,7 +298,7 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 // SLIDE 2 — Motivation
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Motivation");
   title(s, "How does a 50-layer network learn?");
   const cx = W / 2, topY = 1.95, boxW = 2.6, boxH = 0.55, gap = 0.32;
@@ -282,65 +333,27 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 }
 
 // ================================================================
-// SLIDE 3 — Derivative
+// SLIDE 3 — Gradient trên không gian nhiều chiều (gộp Derivative/Gradient/GD)
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Foundations");
-  title(s, "Derivative");
-  formulaBox(s, "f'(x) = lim_{h→0} [f(x+h) − f(x)] / h", { y: 1.95, h: 0.85, fontSize: 19 });
+  title(s, "Gradient trong không gian nhiều chiều");
+  formulaBox(s, "∇_θ L = [ ∂L/∂θ₁ ; … ; ∂L/∂θₙ ]          θ_new = θ_old − η ∇_θ L", { y: 1.95, h: 0.95, fontSize: 18 });
   bulletBlock(s, [
-    "Derivative đo mức độ thay đổi của output khi input thay đổi một lượng nhỏ",
-    "Ví dụ: f(x) = x²  ⇒  f′(x) = 2x",
-    "Đây là viên gạch nền tảng duy nhất cần nhớ — mọi thứ sau đây (gradient, chain rule, backprop) chỉ là ÁP DỤNG CÓ HỆ THỐNG của khái niệm này",
-  ], { y: 3.1, w: W - 2 * MX, h: 2.6, fontSize: 17, spaceAfter: 14 });
+    "∇L: hướng tăng nhanh nhất của Loss",
+    "Gradient Descent đi ngược gradient để giảm Loss",
+    "Chain rule đa biến + Jacobian = nền của backprop",
+  ], { y: 3.3, w: W - 2 * MX, h: 2.6, fontSize: 18, spaceAfter: 14 });
   pageTag(s, 3); stampFooter(s, 3);
-  noteText(s, "Không dành nhiều thời gian cho calculus cơ bản — chỉ nhắc lại đúng 1 slide, đủ để làm nền cho gradient/chain rule sau đây.");
-}
-
-// ================================================================
-// SLIDE 4 — Partial Derivative & Gradient
-// ================================================================
-{
-  const s = pres.addSlide();
-  kicker(s, "Foundations");
-  title(s, "Partial Derivative & Gradient");
-  bulletBlock(s, [
-    "Deep Learning có hàng triệu tham số: L(w₁, w₂, ..., wₙ)",
-    "Gradient = vector gồm TẤT CẢ đạo hàm riêng, một cho mỗi tham số",
-    "∇L chỉ HƯỚNG TĂNG nhanh nhất của Loss trong không gian tham số",
-    "Gradient Descent cập nhật theo hướng NGƯỢC gradient (−∇L) — hướng giảm nhanh nhất cục bộ",
-  ], { x: MX, y: 2.0, w: 6.2, h: 3.6, fontSize: 15.5, spaceAfter: 12 });
-  formulaBox(s, "∇L = [ ∂L/∂w₁ ; ∂L/∂w₂ ; ... ; ∂L/∂wₙ ]", {
-    x: MX + 6.6, y: 2.3, w: W - 2 * MX - 6.6, h: 2.6, fontSize: 17,
-  });
-  pageTag(s, 4); stampFooter(s, 4);
-  noteText(s, "Nhấn mạnh chính xác: gradient chỉ hướng TĂNG nhanh nhất của Loss — không phải hướng giảm. Gradient Descent phải đi NGƯỢC gradient (−∇L) để giảm Loss. Đây là điểm hay bị phát biểu sai/rút gọn quá mức.");
-}
-
-// ================================================================
-// SLIDE 5 — Gradient Descent
-// ================================================================
-{
-  const s = pres.addSlide();
-  kicker(s, "Foundations");
-  title(s, "Gradient Descent");
-  formulaBox(s, "w_new = w_old − η · ∂L/∂w          (dạng vector: θ_new = θ_old − η∇_θL)", { y: 1.95, h: 0.85, fontSize: 17 });
-  bulletBlock(s, [
-    "w — parameter cần cập nhật (θ — toàn bộ vector tham số)",
-    "η (learning rate) — bước nhảy mỗi lần cập nhật",
-    "L — loss function cần tối thiểu hoá",
-    "Dấu trừ là bắt buộc: −∇L mới là hướng GIẢM, vì ∇L tự nó chỉ hướng tăng — trực giác: quả bóng lăn xuống 'loss landscape' theo hướng ngược gradient",
-  ], { y: 3.1, w: W - 2 * MX, h: 3.2, fontSize: 15.5, spaceAfter: 12 });
-  pageTag(s, 5); stampFooter(s, 5);
-  noteText(s, "Gradient Descent là QUY TẮC CẬP NHẬT dùng gradient đã có — khác với Backpropagation (thuật toán TÍNH gradient) — sẽ làm rõ phân biệt này ở slide Multi-layer Backpropagation.");
+  noteText(s, "Gộp calculus cơ bản vào một slide: derivative 1 biến và định nghĩa giới hạn bỏ qua (đã biết ở học phần trước). Trọng tâm: gradient là vector đạo hàm riêng; GD đi ngược gradient; backprop tính gradient bằng multivariable chain rule. Dạng ma trận/Jacobian chi tiết ở slide Backprop.");
 }
 
 // ================================================================
 // SLIDE 6 — Forward Propagation
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Neural Network");
   title(s, "Forward Propagation");
   const cy = 2.3, x1 = MX + 0.3, xz = x1 + 2.6, xa = xz + 2.2, xL = xa + 2.4;
@@ -357,9 +370,8 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
     y: cy + 1.4, h: 0.85, w: W - 2 * MX, fontSize: 17,
   });
   bulletBlock(s, [
-    "Forward pass CHƯA tính parameter gradients — nó tính output VÀ lưu lại các intermediate values/computational graph mà backward pass cần để tính gradient",
-    "Mục tiêu cuối cùng: tính được ∂L/∂w₁ (và mọi tham số khác) để cập nhật bằng Gradient Descent",
-  ], { y: cy + 1.4 + 0.85 + 0.35, w: W - 2 * MX, h: 1.6, fontSize: 15, spaceAfter: 10 });
+    "Forward tạo output và lưu các giá trị trung gian để backward dùng",
+  ], { y: cy + 1.4 + 0.85 + 0.35, w: W - 2 * MX, h: 1.0, fontSize: 17, spaceAfter: 10 });
   pageTag(s, 6); stampFooter(s, 6);
   noteText(s, "Tránh phát biểu tuyệt đối 'forward không liên quan gì tới gradient' — chính xác hơn: forward pass chưa TÍNH gradient, nhưng nó tạo ra (và lưu lại) mọi thứ backward pass cần dùng để tính gradient (đây là điều PyTorch autograd làm ngầm khi xây computational graph).");
 }
@@ -368,7 +380,7 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 // SLIDE 7 — Chain Rule
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Backpropagation");
   title(s, "Chain Rule — trái tim của Backpropagation");
   const cx = MX + 1.0, topY = 2.0, boxW = 1.6, boxH = 0.55, gap = 0.42;
@@ -388,10 +400,10 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
     "Muốn biết w ảnh hưởng L thế nào, ta NHÂN các đạo hàm cục bộ dọc theo đường đi w → z → a → L",
     "Đây chính là ý tưởng cốt lõi của Backpropagation: đi ngược đồ thị, nhân dồn đạo hàm cục bộ",
   ], { x: cx + 2.6, y: 4.2, w: W - MX - (cx + 2.6), h: 1.5, fontSize: 15, spaceAfter: 10 });
-  s.addText("Trong mạng thực tế, activation/parameter là vector/ma trận — Backpropagation áp dụng multivariable chain rule qua Jacobian/vector-Jacobian product; PyTorch autograd làm việc này tự động.", {
-    x: cx + 2.6, y: 6.05, w: W - MX - (cx + 2.6), h: 0.9, fontSize: 11.5, italic: true, color: MUTED,
-    fontFace: FONT_BODY, isTextBox: true, margin: 0,
-  });
+  bulletBlock(s, [
+    "Vector/ma trận: chain rule qua Jacobian (VJP)",
+    "PyTorch autograd tự động hoá bước này",
+  ], { x: cx + 2.6, y: 6.0, w: W - MX - (cx + 2.6), h: 0.9, fontSize: 14, spaceAfter: 4 });
   pageTag(s, 7); stampFooter(s, 7);
   noteText(s, "Chain rule đa biến là nội dung toán học cốt lõi của Backpropagation. Ví dụ ở đây là trường hợp scalar để dễ hình dung — trong mạng thực tế, phép nhân đạo hàm cục bộ tổng quát thành vector-Jacobian product (VJP), điều PyTorch autograd tự động hoá.");
 }
@@ -400,36 +412,32 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 // SLIDE 8 — Backpropagation Example
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Backpropagation");
-  title(s, "Backpropagation Example");
-  const cy = 2.2, boxW = 1.3, boxH = 0.55, x0 = MX + 0.4, gap = 1.9;
-  const labels = ["x=2", "w=3", "z=wx", "y=z²"];
-  const xs = [x0, x0 + gap, x0 + 2 * gap, x0 + 3 * gap];
-  node(s, { x: xs[0], y: cy, w: boxW, h: boxH, label: "x = 2", fill: PANEL });
-  node(s, { x: xs[1], y: cy + 0.9, w: boxW, h: boxH, label: "w = 3", fill: PANEL });
-  node(s, { x: xs[2], y: cy, w: boxW, h: boxH, label: "z = wx", fill: "EAF0FB", lineColor: BLUE });
-  node(s, { x: xs[3], y: cy, w: boxW, h: boxH, label: "y = z²", fill: "FBEEEC", lineColor: RED });
-  arrow(s, xs[0] + boxW, cy + boxH / 2, xs[2], cy + boxH / 2, { color: BLUE, width: 2 });
-  arrow(s, xs[1] + boxW / 2, cy + 0.9, xs[2] + boxW / 2, cy + boxH, { color: BLUE, width: 2 });
-  arrow(s, xs[2] + boxW, cy + boxH / 2, xs[3], cy + boxH / 2, { color: BLUE, width: 2 });
-  s.addText("Forward:  z = 3×2 = 6      y = 6² = 36", {
-    x: MX, y: cy + 1.7, w: W - 2 * MX, h: 0.4, fontSize: 15.5, color: INK, fontFace: "Cambria Math", isTextBox: true, margin: 0,
+  title(s, "Computational Graph & Vector-Jacobian Product");
+  // Đồ thị tensor: forward lưu trung gian, backward nhân VJP
+  const cy = 2.3, boxW = 1.9, boxH = 0.6, gap = 0.55;
+  const nodesG = ["X (batch)", "W₁, b₁", "H₁ = ReLU(XW₁+b₁)", "W₂, b₂", "Ŷ", "Loss L"];
+  nodesG.forEach((lab, i) => {
+    const x = MX + 0.2 + i * (boxW + gap);
+    node(s, { x, y: cy, w: boxW, h: boxH, label: lab, fill: i === nodesG.length - 1 ? "FBEEEC" : PANEL, lineColor: i === nodesG.length - 1 ? RED : LINE, fs: 12.5 });
+    if (i < nodesG.length - 1) arrow(s, x + boxW, cy + boxH / 2, x + boxW + gap, cy + boxH / 2, { color: BLUE, width: 1.75 });
   });
-  arrow(s, xs[3] + boxW / 2, cy + boxH + 0.05, xs[2] + boxW / 2, cy + boxH + 0.55, { color: RED, width: 2.25, dash: "dash" });
-  arrow(s, xs[2] + boxW / 2, cy + boxH + 0.55, xs[1] + boxW / 2, cy + boxH + 0.55 + (0.9 - boxH), { color: RED, width: 2.25, dash: "dash" });
-  formulaBox(s, "∂y/∂z = 2z = 12          ∂z/∂w = x = 2          ⇒  ∂y/∂w = 12 × 2 = 24", {
-    y: 4.9, h: 1.0, w: W - 2 * MX, fontSize: 17, fill: "FBEEEC", color: RED,
-  });
+  s.addText("Forward: lưu các tensor trung gian", { x: MX, y: cy + 0.8, w: 6, h: 0.4, fontSize: 15, color: BLUE, bold: true, fontFace: FONT_BODY, isTextBox: true, margin: 0 });
+  formulaBox(s, "Backward:  v^T ← v^T · J        (vector–Jacobian product, không lập ma trận Jacobian)", { y: 4.0, h: 0.95, w: W - 2 * MX, fontSize: 17, fill: "FBEEEC", color: RED });
+  bulletBlock(s, [
+    "PyTorch autograd xây đồ thị khi forward và thực hiện VJP khi backward",
+    "Chi phí backward ≈ cùng bậc forward, không phụ thuộc số phần tử của Jacobian",
+  ], { y: 5.3, w: W - 2 * MX, h: 1.4, fontSize: 17, spaceAfter: 10 });
   pageTag(s, 8); stampFooter(s, 8);
-  noteText(s, "Ví dụ tối giản để 'chạy tay' toàn bộ chain rule 2 bước — mũi tên đỏ đứt nét minh hoạ dòng chảy NGƯỢC của backward pass.");
+  noteText(s, "Thay ví dụ scalar x=2, w=3 (quá sơ cấp) bằng đồ thị tensor và VJP. Jacobian của một layer có kích thước (số output × số input), không bao giờ lập ra đầy đủ: backprop chỉ nhân vector gradient đầu vào với Jacobian, đó là VJP. Autograd của PyTorch thực hiện việc này cho từng node trong đồ thị.");
 }
 
 // ================================================================
 // SLIDE 9 — Multi-layer Backpropagation
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Backpropagation");
   title(s, "Multi-layer Backpropagation");
   const leftX = MX + 0.3, boxW = 1.5, boxH = 0.42, gap = 0.18, topY = 1.85;
@@ -449,28 +457,23 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
     if (i < bwd.length - 1) arrow(s, rightX + (boxW + 0.3) / 2, y + boxH, rightX + (boxW + 0.3) / 2, y + rStep, { color: RED, width: 1.8 });
   });
   const rbX = rightX + 2.3, rbW = W - MX - (rightX + 2.3);
-  bulletBlock(s, [
-    "Gradient lan truyền về lớp gần input phụ thuộc vào TÍCH của nhiều local Jacobian VÀ weight transformation — không chỉ là tích các đạo hàm vô hướng đơn giản",
-    "Đây chính là cầu nối trực tiếp sang vấn đề tiếp theo: điều gì xảy ra khi tích đó có nhiều số hạng?",
-  ], { x: rbX, y: topY + 0.15, w: rbW, h: 2.1, fontSize: 14.5, spaceAfter: 12 });
-  // Box phân biệt Backprop (tính gradient) vs Optimizer/GD (dùng gradient để update) --
-  // tránh nhầm "Backprop tự update weight".
+  // Chuỗi trực quan: Forward → Loss → Backward (Backprop) → Gradients → Optimizer
   const pipe = [
-    { lab: "Forward", sub: "compute prediction + loss", fill: "EAF0FB", line: BLUE },
-    { lab: "Backward", sub: "compute gradients (Backprop)", fill: "FBEEEC", line: RED },
-    { lab: "Optimizer", sub: "update parameters (Gradient Descent)", fill: "FBF3E2", line: GOLD },
+    { lab: "Forward", fill: "EAF0FB", line: BLUE },
+    { lab: "Loss", fill: "EAF0FB", line: BLUE },
+    { lab: "Backward", fill: "FBEEEC", line: RED },
+    { lab: "Gradients", fill: "FBEEEC", line: RED },
+    { lab: "Optimizer", fill: "FBF3E2", line: GOLD },
   ];
-  const pbY = topY + 2.55, pbW = (rbW - 0.5) / 3, pbH = 1.15;
+  const pbY = topY + 0.35, gapP = 0.18, pbW = (rbW - gapP * (pipe.length - 1)) / pipe.length, pbH = 0.9;
   pipe.forEach((p, i) => {
-    const x = rbX + i * (pbW + 0.25);
-    s.addShape(pres.ShapeType.roundRect, { x, y: pbY, w: pbW, h: pbH, rectRadius: 0.06, fill: { color: p.fill }, line: { color: p.line, width: 1 } });
-    s.addText(p.lab, { x: x + 0.12, y: pbY + 0.1, w: pbW - 0.24, h: 0.35, fontSize: 13, bold: true, color: p.line, fontFace: FONT_HEAD, isTextBox: true, margin: 0 });
-    s.addText(p.sub, { x: x + 0.12, y: pbY + 0.48, w: pbW - 0.24, h: pbH - 0.55, fontSize: 10, color: MUTED, fontFace: FONT_BODY, isTextBox: true, margin: 0 });
-    if (i < pipe.length - 1) arrow(s, x + pbW, pbY + pbH / 2, x + pbW + 0.25, pbY + pbH / 2, { color: MUTED, width: 1.5 });
+    const x = rbX + i * (pbW + gapP);
+    s.addShape(pres.ShapeType.roundRect, { x, y: pbY, w: pbW, h: pbH, rectRadius: 0.06, fill: { color: p.fill }, line: { color: p.line, width: 1.25 } });
+    s.addText(p.lab, { x, y: pbY, w: pbW, h: pbH, align: "center", valign: "middle", fontSize: 13, bold: true, color: p.line, fontFace: FONT_HEAD, isTextBox: true, margin: 0 });
+    if (i < pipe.length - 1) arrow(s, x + pbW, pbY + pbH / 2, x + pbW + gapP, pbY + pbH / 2, { color: MUTED, width: 1.5 });
   });
-  s.addText("Backpropagation KHÔNG tự cập nhật weight — nó chỉ tính gradient. Việc update là của Optimizer (Gradient Descent hoặc biến thể).", {
-    x: rbX, y: pbY + pbH + 0.15, w: rbW, h: 0.55, fontSize: 11, italic: true, color: MUTED, fontFace: FONT_BODY, isTextBox: true, margin: 0,
-  });
+  s.addText("Backprop = tính gradient", { x: rbX, y: pbY + pbH + 0.3, w: rbW, h: 0.4, fontSize: 16, bold: true, color: RED, fontFace: FONT_BODY, isTextBox: true, margin: 0 });
+  s.addText("Gradient Descent = dùng gradient để cập nhật tham số", { x: rbX, y: pbY + pbH + 0.75, w: rbW, h: 0.4, fontSize: 16, bold: true, color: GOLD, fontFace: FONT_BODY, isTextBox: true, margin: 0 });
   pageTag(s, 9); stampFooter(s, 9);
   noteText(s, "Cầu nối cực kỳ quan trọng: lớp gần input có gradient là tích của NHIỀU Jacobian/weight transformation nhất — vì sao vanishing/exploding luôn nặng nhất ở các lớp đầu. Box Forward/Backward/Optimizer làm rõ ranh giới hay bị nhầm: Backpropagation là thuật toán TÍNH gradient; Gradient Descent (trong Optimizer) mới là quy tắc DÙNG gradient đó để update parameter — hai bước tách biệt, Backprop không tự sửa weight.");
 }
@@ -479,7 +482,7 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 // SLIDE 10 — Vanishing Gradient
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Vanishing / Exploding Gradient");
   title(s, "Vanishing Gradient");
   formulaBox(s, "Minh hoạ: nếu mỗi bước co norm gradient theo hệ số ≈0.5, qua 20 layer:  0.5²⁰ ≈ 9.54×10⁻⁷", { y: 1.95, h: 0.9, fontSize: 15 });
@@ -492,9 +495,8 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
     s.addText(lab, { x: bx, y, w: 2.1, h: barH, valign: "middle", fontSize: 12.5, color: MUTED, fontFace: FONT_BODY, isTextBox: true, margin: 0 });
   });
   bulletBlock(s, [
-    "Gradient trong mạng sâu = tích của nhiều local Jacobian và weight matrix; nếu các phép biến đổi này liên tục CO norm của gradient, gradient sẽ vanish",
-    "Layer càng gần input, gradient càng phải đi qua nhiều phép nhân này — nên thường bị ảnh hưởng nặng nhất",
-  ], { x: MX, y: 5.95, w: W - 2 * MX, h: 1.1, fontSize: 13, spaceAfter: 6 });
+    "Tích nhiều Jacobian / weight transformation → gradient co lại",
+  ], { x: MX, y: 5.95, w: W - 2 * MX, h: 0.6, fontSize: 16, spaceAfter: 6 });
   pageTag(s, 10); stampFooter(s, 10);
   noteText(s, "Minh hoạ trực quan bằng thanh giảm dần (ví dụ đơn giản hoá 1 số vô hướng). Trong thực tế, cơ chế là TÍCH của nhiều Jacobian/weight matrix liên tục co norm — không phải chỉ 'đạo hàm < 1'. Số liệu thực nghiệm cho trường hợp này ở phần Demo (Experiment 1&2, Depth Experiment).");
 }
@@ -503,7 +505,7 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 // SLIDE 11 — Exploding Gradient
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Vanishing / Exploding Gradient");
   title(s, "Exploding Gradient");
   formulaBox(s, "Minh hoạ: nếu mỗi bước khuếch đại norm gradient theo hệ số ≈1.5, qua 20 layer:  1.5²⁰ ≈ 3325", { y: 1.95, h: 0.9, fontSize: 15 });
@@ -516,10 +518,8 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
     s.addText(lab, { x: bx, y, w: 2.1, h: barH, valign: "middle", fontSize: 12.5, color: MUTED, fontFace: FONT_BODY, isTextBox: true, margin: 0 });
   });
   bulletBlock(s, [
-    "Hậu quả: loss dao động mạnh hoặc trở thành NaN, weight tăng vọt",
-    "Cùng cơ chế với vanishing — TÍCH của Jacobian/weight matrix, nhưng liên tục KHUẾCH ĐẠI thay vì co norm gradient",
-    "Sẽ thấy hiện tượng này XẢY RA THẬT ở Experiment 3 (Random large init) ngay sau đây",
-  ], { x: MX, y: 6.05, w: W - 2 * MX, h: 1.2, fontSize: 13, spaceAfter: 5 });
+    "Tích nhiều Jacobian / weight transformation → gradient phình ra",
+  ], { x: MX, y: 6.05, w: W - 2 * MX, h: 0.6, fontSize: 16, spaceAfter: 5 });
   pageTag(s, 11); stampFooter(s, 11);
   noteText(s, "'Hai mặt của cùng một đồng xu' với slide trước — cùng cơ chế tích luỹ qua nhiều lớp, chỉ khác việc norm gradient bị co lại hay khuếch đại. Tránh nói đơn giản hoá 'chỉ khác dấu của (đạo hàm−1)' — thực tế là hành vi của TÍCH nhiều ma trận/Jacobian, không phải một số vô hướng duy nhất. Experiment 3 (Random large, std=1.0) sẽ tái hiện đúng hiện tượng này bằng số liệu thật (train loss = NaN).");
 }
@@ -528,21 +528,21 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 // SLIDE 12 — Why Initialization Matters
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Parameter Initialization");
   title(s, "Tại sao không đặt tất cả weight = 0?");
   formulaBox(s, "W = np.zeros(...)", { y: 1.95, h: 0.7, fontSize: 17 });
   bulletBlock(s, [
-    "Mọi HIDDEN UNIT trong 1 lớp nhận CÙNG input, CÙNG weight ⇒ CÙNG z, CÙNG a, CÙNG gradient — giữ SYMMETRY",
-    "Sau update: các hidden unit này vẫn giống hệt nhau — vấn đề áp dụng cho WEIGHT, không phải bias (bias thường vẫn khởi tạo 0 được, vì không gây đối xứng giữa các unit)",
-    "Trong kiến trúc đang khảo sát (10 hidden layer, ReLU — cùng setup với phần Demo phía sau): zero-init khiến hidden-layer gradient bằng 0 ngay tại bước khởi tạo, mạng không học được representation hữu ích",
-  ], { y: 2.9, w: W - 2 * MX, h: 2.3, fontSize: 14.5, spaceAfter: 10 });
+    "Mọi hidden unit trong một lớp nhận cùng input và cùng weight ⇒ cùng z, cùng a, cùng gradient",
+    "Zero-init KHÔNG PHÁ ĐƯỢC SYMMETRY (failure to break symmetry): các unit luôn giống nhau sau mỗi update",
+    "Vấn đề nằm ở WEIGHT. Bias khởi tạo 0 vẫn chấp nhận được, vì đối xứng đã do weight gây ra",
+  ], { y: 2.9, w: W - 2 * MX, h: 2.3, fontSize: 16, spaceAfter: 12 });
   const zr = demo.zero;
   statCallout(s, {
     x: MX, y: 5.5, w: 4.2, h: 1.5, value: zr.initial_grad_norms[0].grad_rms.toFixed(1),
-    label: `gradient RMS lớp ẩn thứ nhất, tại khởi tạo (Zero-init, 10 hidden layer, ReLU) — test acc = ${pct(zr.test_acc)}`, color: RED,
+    label: `Gradient RMS lớp ẩn thứ nhất, tại khởi tạo (Zero-init, 10 hidden layer, ReLU) — test acc = ${pct(zr.test_acc)}`, color: RED,
   });
-  s.addText("Số liệu thật, CÙNG kiến trúc/dataset/seed với toàn bộ phần Demo (results/logs/deep_demo_zero.json) — không lấy từ thí nghiệm lưới chính (6 hidden layer, khác activation) để tránh trộn hai setup khác nhau.", {
+  s.addText("Số liệu từ cùng setup Demo (10 hidden layer, ReLU, seed 42) — results/logs/deep_demo_zero.json.", {
     x: MX + 4.6, y: 5.75, w: W - 2 * MX - 4.6, h: 1.1, fontSize: 12, italic: true, color: MUTED,
     fontFace: FONT_BODY, isTextBox: true, margin: 0,
   });
@@ -554,7 +554,7 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 // SLIDE 13 — Random Initialization
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Parameter Initialization");
   title(s, "Random Initialization");
   formulaBox(s, "W = np.random.randn(...) × std", { y: 1.9, h: 0.7, fontSize: 17 });
@@ -562,13 +562,13 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
     leftTitle: "std quá NHỎ", leftColor: BLUE, leftFill: "EAF0FB",
     leftItems: ["weight rất nhỏ có xu hướng làm co lại scale của pre-activation/activation", "→ gradient nhỏ dần qua mỗi lớp", "→ có xu hướng VANISHING GRADIENT"],
     rightTitle: "std quá LỚN", rightColor: PURPLE, rightFill: "F3EAFB",
-    rightItems: ["weight lớn → activation/pre-activation lớn", "ReLU: gradient có xu hướng tăng vọt qua mỗi lớp → EXPLODING", "Sigmoid/Tanh: pre-activation dễ rơi vào vùng BÃO HOÀ → derivative ≈ 0 → cũng VANISHING"],
+    rightItems: ["weight lớn → activation/pre-activation lớn", "Trong setup MLP + ReLU đang thí nghiệm: gradient bùng nổ qua các lớp (exploding)", "Với sigmoid/tanh: pre-activation dễ bão hoà → derivative ≈ 0 (vanishing)"],
     y: 2.75, h: 3.15, fs: 13.5,
   });
-  s.addText("Hai thí nghiệm sau (Experiment 2 & 3, mạng ReLU) tái hiện std-nhỏ → vanishing và std-lớn → exploding bằng số liệu thật. Với activation bão hoà (sigmoid/tanh), std lớn còn có thể gây vanishing theo cơ chế khác (bão hoà), không chỉ exploding.", {
-    x: MX, y: 6.05, w: W - 2 * MX, h: 1.0, fontSize: 12, italic: true, color: MUTED,
-    fontFace: FONT_BODY, isTextBox: true, margin: 0,
-  });
+  bulletBlock(s, [
+    "Std nhỏ → vanishing (đo ở slide 17)",
+    "Std lớn → exploding (đo ở slide 17)",
+  ], { x: MX, y: 6.05, w: W - 2 * MX, h: 0.9, fontSize: 14, spaceAfter: 4 });
   pageTag(s, 13); stampFooter(s, 13);
   noteText(s, "Bắc cầu trực tiếp sang Xavier/He: cả hai đều là cách CHỌN ĐÚNG variance thay vì chọn tuỳ tiện. Lưu ý quan trọng: kết luận 'std lớn → exploding' quan sát được trong experiment này là hành vi của mạng ReLU cụ thể; với sigmoid/tanh, std quá lớn còn có thể đẩy pre-activation vào vùng bão hoà, khiến derivative gần 0 và gây vanishing thay vì exploding.");
 }
@@ -577,19 +577,15 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 // SLIDE 14 — Xavier Initialization
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Parameter Initialization");
   title(s, "Xavier / Glorot Initialization");
-  formulaBox(s, "Xavier/Glorot Normal:   W_ij ~ N(0, 2/(n_in+n_out))", { y: 1.95, h: 0.85, fontSize: 18 });
+  formulaBox(s, "Xavier / Glorot Normal:   Var(W) = 2 / (fan_in + fan_out)", { y: 1.95, h: 0.85, fontSize: 18 });
   bulletBlock(s, [
-    "Mục tiêu: CHỌN scale của weight để XẤP XỈ giữ variance của tín hiệu ổn định qua các lớp, dưới các giả định đơn giản hoá (activation gần tuyến tính quanh 0, weight độc lập, không đổi theo thời gian training)",
-    "Cân bằng 2 điều kiện: giữ Var(z) khi forward VÀ giữ Var(gradient) khi backward",
-    "Thường dùng với Tanh hoặc activation có gain phù hợp — riêng Tanh còn có lợi thế ZERO-CENTERED (Sigmoid thì KHÔNG zero-centered)",
-  ], { y: 3.1, w: W - 2 * MX, h: 2.6, fontSize: 15, spaceAfter: 10 });
-  s.addShape(pres.ShapeType.roundRect, { x: MX, y: 5.75, w: W - 2 * MX, h: 0.85, rectRadius: 0.06, fill: { color: PANEL }, line: { color: LINE, width: 0.5 } });
-  s.addText("Đây là phân tích TẠI THỜI ĐIỂM khởi tạo — không phải cam kết variance sẽ ổn định suốt quá trình training. Số liệu thực nghiệm (test accuracy, gradient RMS) được trình bày riêng ở phần Demo (Slide 18 trở đi) để không trộn với nhiều setup kiến trúc khác nhau.", {
-    x: MX + 0.25, y: 5.75, w: W - 2 * MX - 0.5, h: 0.85, valign: "middle", fontSize: 12, italic: true, color: MUTED, fontFace: FONT_BODY, isTextBox: true, margin: 0,
-  });
+    "Giả định: activation tuyến tính quanh 0, hoặc đối xứng quanh 0 (vd. Tanh)",
+    "Với ReLU: triệt tiêu miền âm → E[a²] giảm xấp xỉ ½ mỗi lớp → variance co dần (khớp slide 24)",
+    "Dạng Normal ở đây; Xavier Uniform cùng variance, phân phối đều",
+  ], { y: 3.1, w: W - 2 * MX, h: 2.6, fontSize: 17, spaceAfter: 12 });
   pageTag(s, 14); stampFooter(s, 14);
   noteText(s, "Cố tình KHÔNG đưa số test accuracy vào slide lý thuyết này — deck từng có 3 con số Xavier accuracy khác nhau ở 3 slide (6-layer main grid, 10-layer single-seed, 10-layer 5-seed) gây khó hiểu. Toàn bộ số liệu thực nghiệm dồn về đúng 1 nơi: phần Demo/Experimental Evaluation.");
 }
@@ -598,19 +594,14 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 // SLIDE 15 — He Initialization
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Parameter Initialization");
   title(s, "He / Kaiming Initialization");
   formulaBox(s, "He/Kaiming Normal (ReLU):   W_ij ~ N(0, 2/n_in)", { y: 1.95, h: 0.85, fontSize: 18 });
   bulletBlock(s, [
-    "Dưới giả định pre-activation gần đối xứng quanh 0, ReLU đặt khoảng một nửa giá trị về 0 — He dùng scale 2/n_in để bù sự suy giảm second moment (E[a²]) do ReLU gây ra, dưới các giả định đơn giản hoá này",
-    "Gấp đôi công thức forward-preserving thuần (1/n_in); trong nhiều thiết lập, cách này giúp giữ scale của activation cùng bậc độ lớn qua các lớp ReLU",
-    "Với Leaky ReLU (negative slope a): hệ số gain phụ thuộc a — công thức 2/n_in ở trên là trường hợp riêng a=0 (ReLU thường), KHÔNG áp dụng chính xác cho mọi Leaky ReLU",
-  ], { y: 3.1, w: W - 2 * MX, h: 2.6, fontSize: 14, spaceAfter: 9 });
-  s.addShape(pres.ShapeType.roundRect, { x: MX, y: 5.75, w: W - 2 * MX, h: 0.85, rectRadius: 0.06, fill: { color: PANEL }, line: { color: LINE, width: 0.5 } });
-  s.addText("Đây là phân tích TẠI THỜI ĐIỂM khởi tạo — không phải cam kết variance sẽ ổn định suốt quá trình training. Số liệu thực nghiệm (test accuracy, gradient RMS) được trình bày riêng ở phần Demo (Slide 18 trở đi) để không trộn với nhiều setup kiến trúc khác nhau.", {
-    x: MX + 0.25, y: 5.75, w: W - 2 * MX - 0.5, h: 0.85, valign: "middle", fontSize: 12, italic: true, color: MUTED, fontFace: FONT_BODY, isTextBox: true, margin: 0,
-  });
+    "ReLU làm giảm second moment E[a²]; He bù lại bằng scale 2 / n_in",
+    "Chính xác hơn: kiểm soát E[a²], không phải variance (ReLU không zero-centered)",
+  ], { y: 3.1, w: W - 2 * MX, h: 2.4, fontSize: 18, spaceAfter: 14 });
   pageTag(s, 15); stampFooter(s, 15);
   noteText(s, "Cố tình KHÔNG đưa số test accuracy vào slide lý thuyết này (lý do: xem note ở slide Xavier). ReLU output có mean khác 0 (không zero-centered) — 'second moment' (E[a²]) chính xác hơn 'variance' (Var(a)=E[a²]-E[a]²) khi mô tả đại lượng He initialization thực sự kiểm soát, nhưng ở mức trình bày này dùng 'variance/scale' cho dễ hiểu là chấp nhận được. Với Leaky ReLU, gain = sqrt(2/(1+a²)) phụ thuộc negative slope a — không dùng nguyên công thức 2/n_in nếu a≠0.");
 }
@@ -619,7 +610,7 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 // SLIDE 16 — Comparison Table
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Parameter Initialization");
   title(s, "So sánh các phương pháp khởi tạo");
   const headers = ["Initialization", "Formula", "Typical activation", "Ghi chú"];
@@ -628,19 +619,16 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
     ["Small Random", "N(0, 0.01²)", "—", "Naive baseline; không scale theo fan-in/out"],
     ["Xavier / Glorot", "2/(fan_in+fan_out)", "Tanh", "Cân bằng forward/backward"],
     ["He / Kaiming", "2/fan_in", "ReLU", "Bù suy giảm second moment do ReLU"],
-    ["Orthogonal*", "semi-orthogonal", "Deep / RNN", "Không test trong project này"],
   ];
   const tRows = [headers.map((h) => ({ text: h, options: { bold: true, fill: { color: NAVY }, color: PAPER, fontSize: 13 } }))]
     .concat(rows.map((r, ri) => r.map((c, ci) => ({
-      text: c, options: { fontSize: 12.5, color: INK, align: ci === 0 ? "left" : "center", fill: { color: ri % 2 === 0 ? PANEL : PAPER }, bold: ci === 0 },
+      text: hasSub(c) ? splitSub(c).map((p) => ({ text: p.t, options: p.sub ? { subscript: true } : {} })) : c,
+      options: { fontSize: 12.5, color: INK, align: ci === 0 ? "left" : "center", fill: { color: ri % 2 === 0 ? PANEL : PAPER }, bold: ci === 0 },
     }))));
   s.addTable(tRows, { x: MX, y: 2.05, w: W - 2 * MX, h: 2.9, border: { type: "solid", color: LINE, pt: 0.5 }, autoPage: false, colW: [2.3, 2.75, 2.35, 4.53] });
-  s.addText("* Orthogonal — với ma trận chữ nhật là SEMI-orthogonal (WᵀW=I hoặc WWᵀ=I tuỳ shape). Không nằm trong lưới thực nghiệm của project này (chỉ Zero/Random/LeCun/Xavier/He được test) — liệt kê cho đầy đủ bức tranh lý thuyết, không có số liệu thực nghiệm đi kèm.", {
-    x: MX, y: 5.15, w: W - 2 * MX, h: 0.6, fontSize: 11, italic: true, color: MUTED, fontFace: FONT_BODY, isTextBox: true, margin: 0,
-  });
   bulletBlock(s, [
-    "Đây là một trong những slide quan trọng nhất — mọi thí nghiệm tiếp theo đều nhằm KIỂM CHỨNG bảng này bằng số liệu thật",
-  ], { y: 5.9, w: W - 2 * MX, h: 0.8, fontSize: 14.5, spaceAfter: 0 });
+    "Các thí nghiệm tiếp theo kiểm tra các dòng trong bảng này",
+  ], { y: 5.5, w: W - 2 * MX, h: 0.8, fontSize: 18, spaceAfter: 0 });
   pageTag(s, 16); stampFooter(s, 16);
   noteText(s, "Trung thực: hàng Orthogonal chỉ mang tính lý thuyết/tham khảo, KHÔNG có thực nghiệm đi kèm trong project này — tránh ngộ nhận đã test đủ 5 phương pháp.");
 }
@@ -649,7 +637,7 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 // SLIDE 17 — What are Xavier/He trying to preserve? (synthesis box)
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Parameter Initialization — Synthesis");
   title(s, "Xavier và He đang cố giữ điều gì?", { fontSize: 26 });
   twoCol(s, {
@@ -662,7 +650,7 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
   formulaBox(s, "Good initialization attempts to prevent the scale of signals and gradients from systematically collapsing or exploding as depth increases.", {
     y: 4.75, h: 1.15, w: W - 2 * MX, fontSize: 15,
   });
-  s.addText("Đây là MỤC TIÊU chung của Xavier/He, dưới các giả định đơn giản hoá (activation gần tuyến tính quanh 0, weight độc lập...) — không phải một đảm bảo toán học tuyệt đối trong mọi kiến trúc/activation thực tế.", {
+  s.addText("Đây là mục tiêu chung, dưới các giả định đơn giản hoá tại thời điểm khởi tạo — không phải đảm bảo tuyệt đối trong mọi kiến trúc/activation.", {
     x: MX, y: 6.1, w: W - 2 * MX, h: 0.7, fontSize: 12, italic: true, color: MUTED, fontFace: FONT_BODY, isTextBox: true, margin: 0,
   });
   pageTag(s, 17); stampFooter(s, 17);
@@ -673,59 +661,25 @@ function twoCol(slide, { leftTitle, leftItems, leftColor = BLUE, leftFill = "EAF
 // SLIDE 18 — Research Question + Demo Architecture
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Demo — Mini Research Experiment");
   title(s, "Thiết kế thực nghiệm", { fontSize: 26 });
   formulaBox(s, "How does weight initialization affect gradient flow and convergence?", { y: 1.75, h: 0.65, fontSize: 15.5 });
-  const archX = MX, archY = 2.68, boxW = 2.0, boxH = 0.34, gap = 0.1;
-  const archLabels = ["Input 784", "Linear 128", "ReLU", "Linear 128", "ReLU", "...", "Linear 128", "ReLU", "Linear 10"];
-  archLabels.forEach((lab, i) => {
-    const y = archY + i * (boxH + gap);
-    node(s, { x: archX, y, w: boxW, h: boxH, label: lab, fill: lab === "ReLU" ? "EAF0FB" : PANEL, lineColor: lab === "ReLU" ? BLUE : LINE, fs: 11 });
-  });
-  bulletBlock(s, [
-    "Kiến trúc: 784 → (Linear 128 → ReLU) × 10 → 10 — cố tình khá sâu (10 hidden layer) để vấn đề gradient thể hiện rõ. Bias mọi layer khởi tạo 0 trong TẤT CẢ cấu hình",
-    "Dataset: Fashion-MNIST subset (5,000 train / 1,000 val / 2,000 test), pixel chuẩn hoá (mean/std tính từ chính tập train, không dùng thô [0,1]), flatten 28×28→784",
-    "Optimizer: SGD, lr=0.05, batch size=128, 15 epoch, loss=CrossEntropyLoss (PyTorch — gộp sẵn LogSoftmax+NLLLoss, không cần Softmax tường minh trước loss)",
-    "Yếu tố thực nghiệm (experimental factor) trong mỗi so sánh 1-seed là cách khởi tạo weight (Zero, Random nhỏ, Random lớn, Xavier, He); mọi thiết lập khác — kiến trúc, optimizer, lr, batch size, epoch, bias-init, loss, preprocessing, seed — giữ cố định để cô lập đúng 1 biến",
-    "Cùng seed giúp reproducibility và giảm một nguồn randomness khi so sánh 1-seed — không thay thế cho việc lặp lại nhiều seed (multi-seed thay đổi seed CÓ CHỦ ĐÍCH, xem slide Multi-seed)",
-  ], { x: archX + boxW + 0.6, y: 2.5, w: W - MX - (archX + boxW + 0.6), h: 4.6, fontSize: 12, spaceAfter: 9 });
+  const setupHeaders = ["Architecture", "Dataset", "Optimizer", "Epoch", "Batch", "Variable"];
+  const setupRow = ["MLP 784→128×10→10, ReLU", "Fashion-MNIST subset 5k / 1k / 2k", "SGD, lr = 0.05", "15", "128", "Initialization (bias = 0)"];
+  const setupTable = [setupHeaders.map((h) => ({ text: h, options: { bold: true, fill: { color: NAVY }, color: PAPER, fontSize: 14 } })),
+    setupRow.map((c) => ({ text: c, options: { fontSize: 14, color: INK, align: "center", fill: { color: PANEL } } }))];
+  s.addTable(setupTable, { x: MX, y: 2.6, w: W - 2 * MX, h: 1.6, border: { type: "solid", color: LINE, pt: 0.5 }, autoPage: false, colW: [2.6, 2.9, 1.8, 1.0, 1.0, 2.83] });
+  s.addText("Seed 42 · Mỗi so sánh chỉ đổi initialization", { x: MX, y: 4.5, w: W - 2 * MX, h: 0.5, fontSize: 16, italic: true, color: MUTED, fontFace: FONT_BODY, isTextBox: true, margin: 0 });
   pageTag(s, 18); stampFooter(s, 18);
-  noteText(s, "Đóng khung demo như một MINI RESEARCH EXPERIMENT thay vì chỉ 'train CNN rồi show accuracy' — đúng tinh thần đề xuất: cùng kiến trúc/optimizer/dataset, chỉ đổi initialization. Reproducibility: PyTorch 2.x, chạy CPU, seed set qua torch.manual_seed + torch.use_deterministic_algorithms(warn_only=True); DataLoader dùng torch.Generator riêng cùng seed nên thứ tự batch cũng được kiểm soát (không chỉ init/model). Với multi-seed, seed=42..46 set cho MỌI nguồn ngẫu nhiên (Python random, NumPy, torch, DataLoader) qua cùng hàm set_seed() — không chỉ riêng phần khởi tạo weight.");
+  noteText(s, "Đóng khung demo như một MINI RESEARCH EXPERIMENT: cùng kiến trúc/optimizer/dataset, chỉ đổi initialization. Chi tiết: preprocessing chuẩn hoá theo mean/std của chính tập train; loss = CrossEntropyLoss (gộp sẵn LogSoftmax + NLLLoss); DataLoader dùng torch.Generator cùng seed nên thứ tự batch cũng cố định. Với multi-seed, seed 42..46 được set cho mọi nguồn ngẫu nhiên qua cùng hàm set_seed().\n\nBốn nhóm metric được log cho mỗi cấu hình (để phân biệt nguyên nhân thất bại, không chỉ thấy 'model tệ'):\n1. Activation variance theo layer — đo tại khởi tạo, batch đầu tiên.\n2. Gradient RMS theo layer = grad.pow(2).mean().sqrt() — đo tại khởi tạo, trước mọi update, chuẩn hoá theo số phần tử.\n3. Training loss & accuracy theo epoch (test set chỉ dùng đánh giá cuối).\n4. Weight variance theo layer, đối chiếu với công thức lý thuyết.\nQuy ước: 'Layer 1' = hidden Linear layer đầu tiên, gần input nhất.\nThứ tự đọc kết quả: activation variance → Gradient RMS → training loss → test accuracy (accuracy là bằng chứng gián tiếp nhất).");
 }
 
 // ================================================================
-// SLIDE 19 — Metrics logged
-// ================================================================
-{
-  const s = pres.addSlide();
-  kicker(s, "Demo — Mini Research Experiment");
-  title(s, "4 nhóm metric được log mỗi cấu hình");
-  const items = [
-    ["1. Activation Variance theo layer", "Var(A⁽ˡ⁾) tại bước khởi tạo (batch đầu tiên) — tín hiệu SỚM NHẤT cho co cụm/bão hoà, ưu tiên đọc đầu tiên"],
-    ["2. Gradient RMS theo layer", "RMS(∂L/∂W⁽ˡ⁾) = grad.pow(2).mean().sqrt(), đo tại khởi tạo (batch đầu tiên, TRƯỚC update nào) — chuẩn hoá theo số phần tử để so sánh công bằng giữa các layer"],
-    ["3. Training Loss & Accuracy", "mỗi epoch — train + validation, theo dõi hội tụ theo thời gian (test set chỉ dùng đánh giá cuối cùng)"],
-    ["4. Weight Variance theo layer", "đối chiếu Var(W) đo thực tế vs. công thức lý thuyết"],
-  ];
-  s.addText("Quy ước: \"Layer 1\" = hidden Linear layer ĐẦU TIÊN, gần input nhất (không tính input hay output layer).", {
-    x: MX, y: 1.68, w: W - 2 * MX, h: 0.3, fontSize: 11, italic: true, color: MUTED, fontFace: FONT_BODY, isTextBox: true, margin: 0,
-  });
-  let y = 2.1;
-  items.forEach(([a, b]) => {
-    s.addShape(pres.ShapeType.roundRect, { x: MX, y, w: W - 2 * MX, h: 1.0, rectRadius: 0.06, fill: { color: PANEL }, line: { color: LINE, width: 0.5 }, shadow: cardShadow() });
-    s.addText(a, { x: MX + 0.3, y, w: 4.3, h: 1.0, valign: "middle", fontSize: 15, bold: true, color: NAVY, fontFace: FONT_BODY, isTextBox: true, margin: 0 });
-    s.addText(b, { x: MX + 4.7, y, w: W - 2 * MX - 5.0, h: 1.0, valign: "middle", fontSize: 13, color: MUTED, fontFace: FONT_BODY, isTextBox: true, margin: 0 });
-    y += 1.15;
-  });
-  pageTag(s, 19); stampFooter(s, 19);
-  noteText(s, "Không chỉ đo accuracy — 4 nhóm metric cho phép PHÂN BIỆT nguyên nhân thất bại (vanishing vs. exploding vs. overfitting) thay vì chỉ thấy 'model tệ'. Thứ tự đọc kết quả ưu tiên: activation variance → gradient scale → training loss → test accuracy (accuracy là bằng chứng GIÁN TIẾP nhất, dễ bị nhiễu bởi nhiều yếu tố khác ngoài initialization). Sửa nhất quán thuật ngữ: mọi nơi trong deck đều dùng 'Gradient RMS' đúng với công thức grad.pow(2).mean().sqrt() (= norm/sqrt(n_elements)), không dùng '.norm()' thô.");
-}
-
-// ================================================================
-// SLIDES 20-22 — Experiments 1-5 (real data)
+// SLIDES 19-21 — Experiments 1-5 (real data)
 // ================================================================
 function experimentSlide(n, { kickerTxt, titleTxt, codeLines, resultRows, verdictText, verdictColor, note }) {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, kickerTxt);
   title(s, titleTxt, { fontSize: 24 });
   const codeBoxY = 1.85, codeBoxH = 0.35 * codeLines.length + 0.3;
@@ -750,7 +704,7 @@ function experimentSlide(n, { kickerTxt, titleTxt, codeLines, resultRows, verdic
 
 experimentSlide(20, {
   kickerTxt: "Demo — Experiment 1 & 2",
-  titleTxt: "Zero vs. Random nhỏ — HAI cơ chế thất bại KHÁC NHAU",
+  titleTxt: "3 cơ chế thất bại ban đầu: Symmetry · Vanishing · Exploding",
   codeLines: [
     "for layer in model.modules():",
     "    if isinstance(layer, nn.Linear):",
@@ -758,30 +712,15 @@ experimentSlide(20, {
     "        # hoặc: nn.init.normal_(layer.weight, std=0.01)   # Experiment 2",
   ],
   resultRows: [
-    { value: demo.zero.initial_grad_norms[0].grad_rms.toFixed(1), label: "Zero — gradient RMS lớp 1 (khởi tạo)", color: RED },
-    { value: demo.random_normal.initial_grad_norms[0].grad_rms.toExponential(2), label: "Random nhỏ — gradient RMS lớp 1", color: RED },
-    { value: pct(demo.zero.test_acc), label: `Test accuracy — cả 2 cấu hình (mức ngẫu nhiên)`, color: MUTED },
+    { value: demo.zero.initial_grad_norms[0].grad_rms.toFixed(1), label: "Zero — Gradient RMS lớp 1 (khởi tạo)", color: RED },
+    { value: demo.random_normal.initial_grad_norms[0].grad_rms.toExponential(2), label: "Random nhỏ — Gradient RMS lớp 1", color: RED },
+    { value: demo.random_large.initial_grad_norms[0].grad_rms.toExponential(1), label: "Random lớn — Gradient RMS lớp 1 (trước update đầu)", color: PURPLE },
   ],
-  verdictText: `Cùng kết quả cuối (test acc ${pct(demo.zero.test_acc)}) nhưng NGUYÊN NHÂN khác nhau: Zero — các hidden unit KHÔNG PHÁ ĐƯỢC symmetry (failure to break symmetry), không phải "symmetry breaking". Random nhỏ — vanishing gradient thật sự, do scale bị co lại lặp lại qua 10 lớp.`,
+  verdictText: `Zero  →  failure to break symmetry: các neuron cùng lớp giống hệt nhau\nSmall random  →  vanishing gradient     Large random  →  exploding → NaN`,
   verdictColor: RED,
   note: "Số liệu lấy trực tiếp từ results/logs/deep_demo_zero.json và deep_demo_random_normal.json (10 hidden layer, ReLU, 15 epoch, seed=42) — không làm tròn/che giấu: cả hai đều test_acc=10.0%, đúng mức đoán ngẫu nhiên của bài toán 10 lớp. QUAN TRỌNG — tránh gộp hai cơ chế: (1) Zero-init thất bại vì các hidden unit bắt đầu giống hệt nhau và tiếp tục nhận gradient/update giống nhau suốt training — chúng KHÔNG PHÁ ĐƯỢC SYMMETRY (đúng là 'failure to break symmetry'; KHÔNG BAO GIỜ viết 'symmetry breaking' vì cụm đó mang nghĩa ngược lại). (2) Random nhỏ thất bại vì vanishing gradient — cơ chế co scale lặp lại qua nhiều lớp, hoàn toàn khác symmetry. Cả hai cho gradient ~0 trong setup NÀY, nhưng nguyên nhân độc lập.",
 });
 
-experimentSlide(21, {
-  kickerTxt: "Demo — Experiment 3",
-  titleTxt: "Random LỚN (std=1.0) — EXPLODING GRADIENT thật sự",
-  codeLines: [
-    "nn.init.normal_(layer.weight, mean=0, std=1.0)   # Experiment 3",
-  ],
-  resultRows: [
-    { value: demo.random_large.initial_grad_norms[0].grad_rms.toExponential(2), label: "Gradient RMS lớp 1 — đo TRƯỚC update đầu tiên (first batch)", color: PURPLE },
-    { value: "NaN", label: "Train loss trung bình epoch 1 — huấn luyện PHÂN KỲ", color: PURPLE },
-    { value: pct(demo.random_large.test_acc), label: "Test accuracy cuối cùng (không học được gì)", color: MUTED },
-  ],
-  verdictText: `Bằng chứng thực nghiệm trực tiếp cho hiện tượng mô tả ở slide "Exploding Gradient": ngay TRƯỚC bước update đầu tiên, gradient RMS đã bùng nổ tới ${demo.random_large.initial_grad_norms[0].grad_rms.toExponential(1)}; loss trung bình cả epoch 1 đã là NaN và không phục hồi trong suốt 15 epoch còn lại.`,
-  verdictColor: PURPLE,
-  note: "Số liệu thật từ results/logs/deep_demo_random_large.json — không phải minh hoạ lý thuyết. Lưu ý về độ chính xác: gradient RMS 1.87×10⁷ được đo CHÍNH XÁC trên batch đầu tiên, TRƯỚC khi có update nào (bằng chứng trực tiếp, đáng tin cậy nhất). Ngược lại, 'train loss = NaN' là giá trị TRUNG BÌNH cả epoch 1 (nhiều batch) — log hiện tại không tách được NaN xuất hiện từ batch nào cụ thể trong epoch 1, nên dùng wording 'trong epoch 1' thay vì khẳng định 'ngay từ batch đầu tiên'. Cũng cần phân biệt: NaN là TRIỆU CHỨNG của mất ổn định số học (numerical instability) ở bước sau, không phải ĐỊNH NGHĨA của exploding gradient — bằng chứng trực tiếp cho exploding vẫn là gradient RMS đo được, không phải bản thân NaN. Đối lập rõ ràng với Experiment 1&2 (vanishing): trong setup này, cả hai thái cực (std quá nhỏ / quá lớn) của cùng một sai lầm 'không scale theo fan_in' đều khiến mạng không học được.",
-});
 
 experimentSlide(22, {
   kickerTxt: "Demo — Experiment 4 & 5 (5 seeds mỗi scheme)",
@@ -794,9 +733,9 @@ experimentSlide(22, {
   resultRows: [
     { value: `${pct(multiseed("xavier").acc_mean)} ± ${pp(multiseed("xavier").acc_std)}pp`, label: `Xavier — test accuracy, mean ± 1 std (n=${multiseed("xavier").n_seeds} seed, "pp" = percentage points)`, color: GOOD },
     { value: `${pct(multiseed("he").acc_mean)} ± ${pp(multiseed("he").acc_std)}pp`, label: `He — test accuracy, mean ± 1 std (n=${multiseed("he").n_seeds} seed)`, color: GOOD },
-    { value: `${multiseed("he").grms_mean.toExponential(1)} vs ${multiseed("xavier").grms_mean.toExponential(1)}`, label: "Gradient RMS lớp 1, mean — He vs. Xavier (chênh lệch ~35×, cùng chiều ở mọi seed)", color: GOOD },
+    { value: `${multiseed("he").grms_mean.toExponential(1)} vs ${multiseed("xavier").grms_mean.toExponential(1)}`, label: "Gradient RMS lớp 1 (mean, tại khởi tạo) — He vs. Xavier. Lớn hơn ≠ tốt hơn", color: GOOD },
   ],
-  verdictText: `Khoảng mean±1std của Xavier (${pct(multiseed("xavier").acc_mean)}±${pp(multiseed("xavier").acc_std)}pp) và He (${pct(multiseed("he").acc_mean)}±${pp(multiseed("he").acc_std)}pp) chồng lấn đáng kể — run-to-run variability lớn so với chênh lệch mean, KHÔNG đủ cơ sở xếp hạng scheme nào tốt hơn cho ReLU trong setup này. Gradient RMS thì khác biệt rõ và cùng chiều ở cả 5 seed — nhưng "lớn hơn" không tự động nghĩa là "tốt hơn".`,
+  verdictText: `Khoảng mean ± 1 std của Xavier và He chồng lấn — chưa đủ cơ sở xếp hạng scheme nào tốt hơn trong setup này (5 seed, MLP + ReLU). Gradient RMS khác biệt rõ nhưng không tự động nghĩa là tốt hơn.`,
   verdictColor: GOOD,
   note: "Số liệu thật từ results/logs/multiseed_xavier_he.json + results/tables/multiseed_xavier_he_summary.csv (5 seed độc lập {42..46}, cùng kiến trúc 10 hidden layer). pp = percentage points (điểm phần trăm) — giải thích khi nói lần đầu nếu khán giả không quen. Đây là điểm chỉnh sửa quan trọng: 1 seed duy nhất KHÔNG đủ để nói 'Xavier tốt hơn He' hay ngược lại. Về wording: ĐÂY KHÔNG PHẢI một kiểm định thống kê chính thức (không có hypothesis test/confidence interval), và chỉ show mean±std KHÔNG PHẢI show toàn bộ distribution — vì vậy không nói 'hai distribution overlap', mà nói đúng là 'khoảng mean±1std chồng lấn' / 'run-to-run variability lớn so với chênh lệch mean' (đã in nguyên văn 5 giá trị mỗi seed trong code block phía trên để minh bạch). Về gradient RMS: He lớn hơn Xavier một cách nhất quán ở cả 5 seed — nhưng PHẢI nói thêm 'gradient RMS lớn hơn không tự động nghĩa là optimization tốt hơn'; điều quan trọng là tránh collapse/explosion bệnh lý, không phải gradient càng lớn càng tốt. Không suy rộng thành 'He luôn cho gradient tốt hơn'.",
 });
@@ -805,16 +744,17 @@ experimentSlide(22, {
 // SLIDE 23 — Accuracy curves (all 5, real chart)
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Demo — Kết quả tổng hợp");
   title(s, "5 thí nghiệm, 1 kiến trúc, 1 biểu đồ", { fontSize: 25 });
-  const imgW = 6.1, imgH = imgW / (9 / 6.2);
-  s.addImage({ path: FIG("deep_demo_accuracy_slide.png"), x: (W - imgW) / 2, y: 1.7, w: imgW, h: imgH });
+  const imgW = 7.6, imgH = imgW / (9 / 6.2);
+  s.addImage({ path: FIG("deep_demo_accuracy_slide.png"), x: MX, y: 1.7, w: imgW, h: imgH });
   bulletBlock(s, [
-    "Zero & Random nhỏ: đường phẳng ngang mức 10% — không học được gì",
-    "Random lớn: không xuất hiện trên biểu đồ (loss = NaN ngay từ epoch 1)",
-    "Xavier & He: hội tụ rõ ràng, đạt ~67–68% dù kiến trúc sâu tới 10 lớp",
-  ], { y: 1.7 + imgH + 0.15, w: W - 2 * MX, h: 1.1, fontSize: 13.5, spaceAfter: 5 });
+    "Validation Accuracy vs Epoch",
+    "Legend: Zero · Random nhỏ · Random lớn · Xavier · He",
+    "Random lớn không hiển thị (loss = NaN)",
+    "Val acc dao động: vanilla SGD (lr 0.05, không momentum, không scheduler) trên 10 tầng",
+  ], { x: MX + imgW + 0.4, y: 2.2, w: W - 2 * MX - imgW - 0.4, h: 4.2, fontSize: 15, spaceAfter: 12 });
   pageTag(s, 23); stampFooter(s, 23);
   noteText(s, "Biểu đồ tổng hợp cả 5 đường cùng lúc — hình ảnh 'ăn điểm' đầu tiên vì gói gọn toàn bộ câu chuyện demo trong 1 slide.");
 }
@@ -823,7 +763,7 @@ experimentSlide(22, {
 // SLIDE 24 — Gradient RMS Heatmap
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Demo — Visualization quan trọng nhất");
   title(s, "Gradient RMS Heatmap — layer × initialization", { fontSize: 23 });
   s.addText("Đo tại khởi tạo (initialization) — trên batch đầu tiên, TRƯỚC bất kỳ update tham số nào", {
@@ -831,8 +771,8 @@ experimentSlide(22, {
   });
   const imgW = 9.4, imgH = imgW / (11 / 5.2);
   s.addImage({ path: FIG("gradient_heatmap_slide.png"), x: (W - imgW) / 2, y: 2.0, w: imgW, h: imgH });
-  s.addText("log₁₀(RMS gradient) đo thật tại bước khởi tạo, 10 hidden layer, activation ReLU — xanh dương = rất nhỏ (đặc trưng vanishing), đỏ = rất lớn (đặc trưng exploding), cam nhạt/vàng = vùng gradient ở mức trung bình, quan sát thấy ổn định hơn trong thực nghiệm này.", {
-    x: MX, y: 2.0 + imgH + 0.1, w: W - 2 * MX, h: 0.55, fontSize: 11.5, italic: true, color: MUTED,
+  s.addText("log₁₀(Gradient RMS) đo thật tại khởi tạo, 10 hidden layer, ReLU. Xanh = nhỏ (vanishing), đỏ = lớn (exploding). Thang màu liên tục, không phải ngưỡng chính thức.", {
+    x: MX, y: 2.0 + imgH + 0.1, w: W - 2 * MX, h: 0.55, fontSize: 14, italic: true, color: MUTED,
     fontFace: FONT_BODY, isTextBox: true, margin: 0,
   });
   pageTag(s, 24); stampFooter(s, 24);
@@ -843,16 +783,20 @@ experimentSlide(22, {
 // SLIDE 25 — Activation Variance (forward-pass evidence)
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Demo — Visualization bổ sung (Forward Pass)");
-  title(s, "Activation Variance theo layer — đo tại khởi tạo", { fontSize: 22 });
-  const imgW = 5.75, imgH = imgW / (9 / 6.2);
-  s.addImage({ path: FIG("activation_variance_slide.png"), x: (W - imgW) / 2, y: 1.65, w: imgW, h: imgH });
+  title(s, "Activation Variance at Initialization", { fontSize: 24 });
+  s.addText("Initialization phải cân bằng cả forward signal (slide này) lẫn backward gradient (slide trước) · 1 batch, trước mọi update", {
+    x: MX, y: 1.3, w: W - 2 * MX, h: 0.35, fontSize: 13, italic: true, color: RED, fontFace: FONT_BODY, isTextBox: true, margin: 0,
+  });
+  const imgW = 7.6, imgH = imgW / (9 / 6.2);
+  s.addImage({ path: FIG("activation_variance_slide.png"), x: MX, y: 1.65, w: imgW, h: imgH });
   bulletBlock(s, [
-    "Random nhỏ: Var(a) co lại dần theo layer — cùng câu chuyện vanishing đã thấy ở gradient, nhưng lần này ở FORWARD PASS",
-    "Random lớn: Var(a) tăng theo cấp số mũ — hàng chục bậc độ lớn chỉ sau 10 layer",
-    "He: gần như phẳng (layer 1→10 đổi ~0.8×). Xavier: VẪN suy giảm (~395×) nhưng hẹp hơn NHIỀU so với Random nhỏ (~10¹⁹×) — không gọi Xavier là 'phẳng'",
-  ], { y: 1.65 + imgH + 0.1, w: W - 2 * MX, h: 1.15, fontSize: 11, spaceAfter: 4 });
+    "Random nhỏ: Var(a) co lại dần theo layer (forward)",
+    "Random lớn: Var(a) tăng theo cấp số mũ",
+    "He: gần như phẳng (layer 1→10 đổi ~0.8×)",
+    "Xavier: vẫn giảm (~395×), hẹp hơn Random nhỏ rất nhiều — không gọi là 'phẳng'",
+  ], { x: MX + imgW + 0.4, y: 2.0, w: W - 2 * MX - imgW - 0.4, h: 4.6, fontSize: 14, spaceAfter: 12 });
   pageTag(s, 25); stampFooter(s, 25);
   noteText(s, "Bổ sung quan trọng: Heatmap slide trước chứng minh initialization ảnh hưởng BACKWARD (gradient); slide này chứng minh THÊM rằng cùng cơ chế cũng chi phối FORWARD (activation) — đúng như slide Synthesis đã nêu (Var(a) ổn định ở forward, Var(δ) ổn định ở backward — cả hai đều là phân tích TẠI THỜI ĐIỂM khởi tạo). Không vẽ Zero-init vì mọi activation của nó đúng bằng 0 (không biểu diễn được trên thang log). Lưu ý chính xác: ReLU output có mean khác 0 (không zero-centered), nên 'second moment' E[a²] mô tả đúng hơn đại lượng mà He initialization thực sự kiểm soát so với 'variance' Var(a)=E[a²]-E[a]² thuần tuý — ở đây vẫn dùng Var(a) (numpy .var(), đã trừ mean) cho nhất quán với code, chỉ cần lưu ý sự khác biệt khi bị hỏi sâu. Đã KIỂM TRA số liệu trước khi viết bullet: Xavier layer1→10 giảm từ 0.619 xuống 0.00157 (~395×) — SUY GIẢM THẬT, không phẳng; He layer1→10 đổi từ 0.720 lên 0.932 (~0.77-1.3×) — mới thực sự gần phẳng. Số liệu thật từ results/logs/deep_demo_*.json, field initial_activation_stats.");
 }
@@ -861,18 +805,16 @@ experimentSlide(22, {
 // SLIDE 26 — Depth Experiment
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Demo — Depth Experiment");
   title(s, "Random vs. Xavier vs. He — theo độ sâu (2→50 lớp)", { fontSize: 22 });
   const imgW = 6.6, imgH = imgW / (9 / 6.2);
   s.addImage({ path: FIG("depth_comparison_v2_slide.png"), x: MX, y: 1.9, w: imgW, h: imgH });
   const he12 = depthRow("he", 12), he50 = depthRow("he", 50);
   bulletBlock(s, [
-    "Random (naive): trong thiết lập này, gradient RMS về xấp xỉ 0 từ độ sâu 20 trở lên",
-    "Xavier: suy giảm dần đều — cho gradient RMS rất nhỏ tại depth=50 (≈3×10⁻¹⁰)",
-    "He: duy trì gradient RMS cùng order of magnitude (~10⁻²) đến depth=50, trong architecture và training setup đang xét",
-    `Nhưng gradient ổn định KHÔNG đồng nghĩa học tốt: He@L=12 train loss chỉ ${he12.final_train_loss.toFixed(3)} trong khi test loss vọt lên ${he12.test_loss.toFixed(2)} (test acc ${pct(he12.test_acc)}) — khoảng cách train/test lớn này là bằng chứng cụ thể cho overfitting, không phải suy đoán từ accuracy đơn lẻ`,
-  ], { x: MX + imgW + 0.4, y: 2.0, w: W - MX - imgW - 0.4 - MX, h: 4.6, fontSize: 12, spaceAfter: 9 });
+    "Depth ↑ → Random / Xavier gradient suy giảm; He giữ scale tốt hơn trong setup này",
+    "Stable gradient ≠ good generalization",
+  ], { x: MX + imgW + 0.4, y: 2.2, w: W - MX - imgW - 0.4 - MX, h: 4.0, fontSize: 17, spaceAfter: 16 });
   pageTag(s, 26); stampFooter(s, 26);
   noteText(s, `Số liệu thật từ results/logs/depth_experiment_v2.json. Tránh phát biểu phổ quát kiểu "He ổn định ở mọi độ sâu" hay "Xavier thất bại" — đây là quan sát TRONG setup thực nghiệm cụ thể (MLP, ReLU, Fashion-MNIST). He duy trì gradient RMS cùng bậc độ lớn xuyên suốt (kể cả L=50: grad_rms≈${depthRow("he", 50).grad_rms_layer1_init.toExponential(2)}) nhưng test accuracy vẫn dao động (L=12: 32.6%, L=20: 53.6%, L=50: ${pct(he50.test_acc)}). Về nhãn 'overfitting' tại L=12: chỉ gọi đúng tên khi có bằng chứng train tốt/test kém — ở đây train loss=${he12.final_train_loss.toFixed(3)} (thấp, khớp tốt) trong khi test loss=${he12.test_loss.toFixed(2)} (cao, gấp hơn 10 lần) — khoảng cách train/test rõ ràng này là căn cứ cho nhãn overfitting, không phải chỉ suy đoán từ test accuracy thấp. Insight quan trọng nhất: stable gradient flow là điều kiện quan trọng cho optimization ổn định, nhưng KHÔNG phải điều kiện đủ để model generalize tốt.`);
 }
@@ -881,14 +823,14 @@ experimentSlide(22, {
 // SLIDE 27 — Results Table
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Kết quả");
   title(s, "Bảng tổng hợp — 5 thí nghiệm, số liệu thật", { fontSize: 24 });
-  s.addText("Thứ tự đọc kết quả (từ trực tiếp nhất): Gradient RMS → Train Loss → Test Accuracy. Gradient RMS đo tại khởi tạo (batch đầu tiên); Train/Test loss đo sau 15 epoch.", {
+  s.addText("Seed 42, 1 seed mỗi cấu hình (Xavier/He n=5 xem slide trước). Gradient RMS đo tại khởi tạo; Train loss và Test accuracy đo tại epoch 15.", {
     x: MX, y: 1.68, w: W - 2 * MX, h: 0.4, fontSize: 11.5, italic: true, color: MUTED, fontFace: FONT_BODY, isTextBox: true, margin: 0,
   });
-  const headers = ["Init", "Grad RMS (L1, tại KT)", "Final Train Loss", "Test Accuracy", "Gradient behavior"];
-  const stabilityColor = { "Vanishing": RED, "Exploding (NaN)": PURPLE, "Không vanish/explode rõ rệt": GOOD };
+  const headers = ["Init", "Gradient RMS (L1, khởi tạo)", "Train Loss (ep 15)", "Test Acc (ep 15)", "Observed behavior at initialization"];
+  const stabilityColor = { "Vanishing": RED, "Symmetry failure": GOLD, "Exploding → NaN": PURPLE, "Không vanish/explode rõ rệt": GOOD };
   const rows = demoSchemes.map((sch) => {
     const r = demo[sch];
     const csvLabel = { zero: "Zero", random_normal: "Random (small)", random_large: "Random (large)", xavier: "Xavier", he: "He" }[sch];
@@ -896,7 +838,8 @@ experimentSlide(22, {
     const lossTxt = finalLoss === null ? "NaN" : finalLoss.toFixed(3);
     const g1 = r.initial_grad_norms[0].grad_rms;
     let stab;
-    if (finalLoss === null) stab = "Exploding (NaN)";
+    if (sch === "zero") stab = "Symmetry failure";
+    else if (finalLoss === null) stab = "Exploding → NaN";
     else if (g1 < 1e-6) stab = "Vanishing";
     else stab = "Không vanish/explode rõ rệt";
     return [csvLabel, g1.toExponential(1), lossTxt, pct(r.test_acc), stab];
@@ -922,17 +865,16 @@ experimentSlide(22, {
 // SLIDE 28 — Limitations
 // ================================================================
 {
-  const s = pres.addSlide();
+  const s = addSlide();
   kicker(s, "Trung thực khoa học");
   title(s, "Limitations", { fontSize: 28 });
   bulletBlock(s, [
-    "Dataset: Fashion-MNIST SUBSET (5.000/1.000/2.000 mẫu) — không phải full dataset, kết luận chưa chắc mở rộng sang quy mô lớn hơn",
-    "Kiến trúc: chỉ MLP + ReLU — chưa đại diện cho CNN, Transformer, RNN (mỗi kiến trúc có đặc thù gradient riêng)",
-    "Optimizer/learning rate CỐ ĐỊNH (SGD, lr=0.05) để cô lập biến initialization — chưa khảo sát tương tác initialization × learning rate/optimizer, vốn có thể quan trọng trong thực tế",
-    "Gradient RMS và Activation Variance đo TẠI KHỞI TẠO (1 batch, trước update nào) — không phải trung bình suốt quá trình training; hành vi có thể đổi khác sau vài epoch",
-    "Multi-seed mới chạy n=5 cho Xavier/He — đủ để thấy khoảng chồng lấn nhưng còn ít để ước lượng chính xác biến thiên; Zero/Random nhỏ/Random lớn mới chạy 1 seed (kết quả của chúng — 10%/NaN — đủ rõ để không cần multi-seed, nhưng chưa được xác nhận lại)",
-    "Depth Experiment dùng 8 epoch (ít hơn 15 epoch của lưới chính) để giữ thời gian chạy hợp lý — số tuyệt đối có thể khác nếu train đủ epoch",
-  ], { y: 2.0, w: W - 2 * MX, h: 4.7, fontSize: 14, spaceAfter: 11 });
+    "Dataset subset (5k / 1k / 2k)",
+    "MLP + ReLU",
+    "SGD, lr cố định",
+    "Limited seeds (Xavier/He n = 5; còn lại 1)",
+    "Mạng > 50 lớp ngày nay: Initialization + Residual (skip) + Normalization (LayerNorm / BatchNorm) để kiểm soát gradient flow",
+  ], { y: 2.2, w: W - 2 * MX, h: 4.6, fontSize: 19, spaceAfter: 14 });
   pageTag(s, 28); stampFooter(s, 28);
   noteText(s, "Slide Limitations trước Conclusion — chuẩn mini research presentation, không che giấu giới hạn phạm vi. Nếu bị hỏi 'vậy kết luận có generalize không' — đây chính là slide để trả lời trung thực: kết luận đúng TRONG phạm vi đã khảo sát (MLP/ReLU/Fashion-MNIST subset/SGD cố định), chưa chắc đúng ở quy mô/kiến trúc/optimizer khác.");
 }
@@ -941,7 +883,7 @@ experimentSlide(22, {
 // SLIDE 29 — Conclusion
 // ================================================================
 {
-  const s = pres.addSlide(); darkBg(s);
+  const s = addSlide(); darkBg(s);
   kicker(s, "Kết luận", { color: "8FA3C9", y: 0.5 });
   const flow = ["Derivative", "Chain Rule", "Backpropagation", "Gradient Flow",
     "Vanishing / Exploding Gradient", "Parameter Initialization", "Stable Training"];
@@ -962,50 +904,24 @@ experimentSlide(22, {
   });
   y += 0.98;
   const takeaways = [
-    "Backpropagation là thuật toán tính gradient hiệu quả bằng cách áp dụng chain rule ngược qua computational graph, tái sử dụng đạo hàm cục bộ (reverse-mode autodiff) — đặc biệt hiệu quả khi một scalar loss phụ thuộc vào rất nhiều tham số, đúng bối cảnh Deep Learning.",
-    "Trong mạng sâu, gradient phụ thuộc vào tích của nhiều Jacobian/weight transformation — scale của gradient có thể vanish hoặc explode.",
-    "Xavier và He chọn scale of initial weights dựa trên fan-in/fan-out để giữ activation và gradient trong phạm vi hợp lý, dưới các giả định nhất định.",
-    "Good initialization cải thiện optimization và gradient flow, nhưng không đảm bảo generalization tốt.",
+    "Backprop tính gradient; Gradient Descent dùng gradient để cập nhật.",
+    "Gradient là tích nhiều Jacobian, nên có thể vanish hoặc explode.",
+    "Initialization quyết định scale ban đầu của tín hiệu và gradient.",
+    "Stable gradient ≠ guaranteed generalization.",
   ];
   const paras = takeaways.map((t, i) => ({
-    text: `${i + 1}. ${t}`, options: { color: "CADCFC", fontSize: 10, breakLine: true, paraSpaceAfter: 4, fontFace: FONT_BODY },
+    text: `${i + 1}. ${t}`, options: { color: "CADCFC", fontSize: 13, breakLine: true, paraSpaceAfter: 6, fontFace: FONT_BODY },
   }));
-  s.addText(paras, { x: MX, y, w: W - 2 * MX, h: 1.6, valign: "top", isTextBox: true, margin: 0 });
+  s.addText(paras, { x: MX, y, w: W - 2 * MX, h: 1.9, valign: "top", isTextBox: true, margin: 0 });
   stampFooter(s, 29, true);
   noteText(s, "Flow tổng kết toàn bộ mạch trình bày. Đã thêm 1 câu trả lời TRỰC TIẾP câu hỏi nghiên cứu (đặt ra ở Slide 2) trước khi liệt kê 4 takeaway — tránh để giảng viên phải tự suy ra câu trả lời. Takeaway #1 nhấn mạnh giá trị THUẬT TOÁN của Backpropagation (reverse-mode autodiff, tái sử dụng đạo hàm cục bộ — hiệu quả đặc biệt khi 1 scalar loss phụ thuộc hàng triệu tham số) — không hạ thấp thành 'chỉ là chain rule'.");
 }
 
 // ================================================================
-// SLIDE 30 — Optional extension
+// SLIDE 29 — References
 // ================================================================
 {
-  const s = pres.addSlide();
-  kicker(s, "Mở rộng (tham khảo)");
-  title(s, "Từ Initialization tới mạng hiện đại", { fontSize: 24 });
-  const cx = W / 2, boxW = 3.4, boxH = 0.55, topY = 2.0, gap = 0.35;
-  const stack = ["Initialization", "+ Normalization", "+ Residual Connections"];
-  stack.forEach((lab, i) => {
-    const y = topY + i * (boxH + gap);
-    node(s, { x: cx - boxW / 2, y, w: boxW, h: boxH, label: lab, fill: i === 0 ? "EAF0FB" : PANEL, lineColor: i === 0 ? BLUE : LINE, fs: 14 });
-    if (i < stack.length - 1) arrow(s, cx, y + boxH, cx, y + boxH + gap, { color: BLUE, width: 2 });
-  });
-  const finalY = topY + stack.length * (boxH + gap);
-  node(s, { x: cx - boxW / 2, y: finalY, w: boxW, h: boxH, label: "Modern Deep Networks", fill: "FBEEEC", lineColor: RED, fs: 14 });
-  arrow(s, cx, topY + stack.length * boxH + (stack.length - 1) * gap, cx, finalY, { color: BLUE, width: 2 });
-  bulletBlock(s, [
-    "Batch Normalization / Layer Normalization — chuẩn hoá lại tín hiệu MỖI lớp, không chỉ dựa vào 1 lần khởi tạo",
-    "Residual Networks — cho gradient một 'đường tắt' (skip connection) bỏ qua tích luỹ nhiều lớp",
-    "Gradient Clipping — chặn cứng exploding gradient bất kể nguyên nhân",
-  ], { x: MX, y: finalY + 1.0, w: W - 2 * MX, h: 2.0, fontSize: 13.5, spaceAfter: 8 });
-  pageTag(s, 30); stampFooter(s, 30);
-  noteText(s, "Chỉ giới thiệu ngắn, KHÔNG đi sâu — tránh lệch trọng tâm khỏi Backprop + Initialization là chủ đề chính của báo cáo.");
-}
-
-// ================================================================
-// SLIDE 31 — References
-// ================================================================
-{
-  const s = pres.addSlide(); darkBg(s);
+  const s = addSlide(); darkBg(s);
   kicker(s, "Tài liệu tham khảo", { color: "8FA3C9", y: 0.55 });
   title(s, "References", { color: PAPER, y: 1.0 });
   const refs = [
